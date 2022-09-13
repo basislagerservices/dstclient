@@ -17,6 +17,9 @@
 
 """Types for crawler results."""
 
+__all__ = ("User", "Thread", "Posting")
+
+
 import datetime as dt
 from dataclasses import dataclass
 from typing import Optional

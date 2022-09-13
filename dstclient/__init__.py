@@ -22,3 +22,4 @@ __all__ = ("DerStandardAPI",)
 
 
 from .api import DerStandardAPI
+from .dataclasses import Posting, Thread, User
