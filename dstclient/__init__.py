@@ -18,8 +18,8 @@
 """API implementation for derstandard.at."""
 
 
-__all__ = ("DerStandardAPI", "Posting", "Thread", "User")
+__all__ = ("TickerAPI", "Posting", "Thread", "User")
 
 
-from .api import DerStandardAPI
 from .dataclasses import Posting, Thread, User
+from .ticker import TickerAPI

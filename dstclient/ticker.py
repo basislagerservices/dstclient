@@ -15,10 +15,10 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""Partially reverse-engineered API to derstandard.at."""
+"""Partially reverse-engineered API for tickers on derstandard.at."""
 
 
-__all__ = ("DerStandardAPI",)
+__all__ = ("TickerAPI",)
 
 
 import asyncio
@@ -60,7 +60,7 @@ def chromedriver() -> Iterator[webdriver.Chrome]:
         driver.quit()
 
 
-class DerStandardAPI:
+class TickerAPI:
     """API methods for derstandard.at."""
 
     def __init__(self) -> None:
