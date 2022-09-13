@@ -15,11 +15,4 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""API implementation for derstandard.at."""
-
-
-__all__ = ("DerStandardAPI", "Posting", "Thread", "User")
-
-
-from .api import DerStandardAPI
-from .dataclasses import Posting, Thread, User
+"""Configuration for unit tests."""
