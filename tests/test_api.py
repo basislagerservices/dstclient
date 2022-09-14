@@ -87,3 +87,29 @@ async def test_get_thread_postings_with_session(api, mocker):
         )
         assert smock.call_count == 0
     assert len(threads) == 8
+
+
+@pytest.mark.parametrize(
+    "article_id,forum_id",
+    [
+        (2000139096060, "2ElFnh4hoV9qyILJHCCYxeUfE4u"),
+        (2000139105349, "2ElgqjRTEjnrQxkrdI4HaSlEakw"),
+        (2000139053504, "2EiAs5HlM0bGW0ZjGiqThlt5GTF"),
+        (2000139100674, "2ElPpBr7oBIcUl6VJoJmaLRDeLX"),
+        (2000139091832, "2El4k6eHDupOjBkhZMfJrTjaDBE"),
+        (2000139107626, "2Em01E9pMuCTnoXp9q1XTUkAqq9"),
+        (2000139101229, "2ElRS6ZEnfC0sQqJ488bhH57tru"),
+        (2000139026342, "2EfeS5M2EMYxhabZxWAInR54jj7"),
+        (2000139082527, "2EkfUzrb4O4n53dlIAz1MhhdJzA"),
+        (2000139089058, "2EkvRGx7uPGznqMYHPTy7RJUT87"),
+        (2000139070622, "2EigzOL0m9qWOPcWIdQw5AlOUEh"),
+        (2000139068548, "2EidcaHYqtXRWluleSC37JYdfgs"),
+        (2000139081230, "2EkbNXADsP55O0jxMBL2zxrwbg3"),
+        (2000139091383, "2El37dlR0iHjDhG6HCdAamyEylo"),
+        (2000139101643, "2ElT8F6iMYI06cY8bOSZnW2tQqO"),
+    ],
+)
+async def test_get_forum_id(api, article_id, forum_id):
+    """Get the GraphQL ID of a forum."""
+    result = await api._get_forum_id(article_id)
+    assert result == forum_id

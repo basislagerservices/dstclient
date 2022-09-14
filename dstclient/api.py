@@ -25,8 +25,10 @@ import asyncio
 import concurrent
 import contextlib
 import itertools
+import json
 import time
-from typing import Any, AsyncContextManager, Optional, Union
+from typing import Any, AsyncContextManager, Optional, Union, cast
+from urllib.parse import urlencode
 
 from aiohttp import ClientSession
 
@@ -34,7 +36,6 @@ import dateutil.parser as dateparser
 
 import pytz
 
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
 from .dataclasses import Posting, Thread, User
@@ -47,13 +48,25 @@ class DerStandardAPI:
     def __init__(self) -> None:
         self._cookies: Optional[dict[str, str]] = None
 
-    def URL(self, tail: str) -> str:
-        """Construct an URL for a request."""
-        return "https://www.derstandard.at/" + tail
+    def TURL(self, tail: str) -> str:
+        """Construct an URL for a ticker API request."""
+        return "https://www.derstandard.at/jetzt/api/" + tail
+
+    def FURL(self, tail: str) -> str:
+        """Construct an URL for a forum API request."""
+        return "https://capi.ds.at/forum-serve-graphql/v1/" + tail
 
     def session(self) -> ClientSession:
         """Create a client session with credentials."""
-        return ClientSession(cookies=self._cookies)
+        headers = {"content-type": "application/json"}
+        return ClientSession(cookies=self._cookies, headers=headers)
+
+    def _session_context(
+        self, client_session: Optional[ClientSession]
+    ) -> AsyncContextManager[ClientSession]:
+        if client_session:
+            return contextlib.nullcontext(client_session)
+        return self.session()
 
     ###########################################################################
     # Ticker API                                                              #
@@ -65,15 +78,9 @@ class DerStandardAPI:
         client_session: Optional[ClientSession] = None,
     ) -> list[Thread]:
         """Get a list of thread IDs of a ticker."""
-        url = self.URL(f"/jetzt/api/redcontent?id={ticker_id}&ps=1000000")
+        url = self.TURL(f"redcontent?id={ticker_id}&ps=1000000")
 
-        context: AsyncContextManager[ClientSession]
-        if client_session:
-            context = contextlib.nullcontext(client_session)
-        else:
-            context = self.session()
-
-        async with context as session:
+        async with self._session_context(client_session) as session:
             async with session.get(url) as resp:
                 return [
                     Thread(
@@ -98,19 +105,11 @@ class DerStandardAPI:
         client_session: Optional[ClientSession] = None,
     ) -> Any:
         """Get a single page of postings from a ticker thread."""
-        url = self.URL(
-            f"/jetzt/api/postings?objectId={ticker_id}&redContentId={thread_id}"
-        )
+        url = self.TURL(f"postings?objectId={ticker_id}&redContentId={thread_id}")
         if skip_to:
             url += f"&skipToPostingId={skip_to}"
 
-        context: AsyncContextManager[ClientSession]
-        if client_session:
-            context = contextlib.nullcontext(client_session)
-        else:
-            context = self.session()
-
-        async with context as session:
+        async with self._session_context(client_session) as session:
             async with session.get(url) as resp:
                 return await resp.json()
 
@@ -154,6 +153,56 @@ class DerStandardAPI:
             )
             for p in postings
         ]
+
+    ###########################################################################
+    # Forum API                                                               #
+    ###########################################################################
+    async def _get_forum_id(
+        self,
+        article_id: Union[int, str],
+        *,
+        client_session: Optional[ClientSession] = None,
+    ) -> str:
+        """Get the forum ID for an article."""
+        # TODO: Clarify if this works for non-cached requests and if it doesn't work,
+        #       then figure out what to use as the query. For now, the hash appears to
+        #       be constant for all forums.
+        query = {
+            "operationName": "GetForumInfo",
+            "variables": json.dumps(
+                {"contextUri": f"https://www.derstandard.at/story/{article_id}"}
+            ),
+            "extensions": json.dumps(
+                {
+                    "persistedQuery": {
+                        "version": 1,
+                        "sha256Hash": "cb2d9227f7b2dfcce257d248adef0aa7d251a0b127fb5387af46abdd9103a53e",
+                    }
+                }
+            ),
+        }
+        url = self.FURL("?" + urlencode(query))
+
+        # We make multiple requests. The first one might fail if the request is not
+        # cached, so we repeat it. The second one should work, but we just make more
+        # to be sure.
+        # TODO: Clarify if this is necessary and correct...
+        async with self._session_context(client_session) as session:
+            for _ in range(5):
+                async with session.get(url) as resp:
+                    with contextlib.suppress(KeyError):
+                        data = await resp.json()
+                        return cast(str, data["data"]["getForumByContextUri"]["id"])
+
+        raise Exception("forum ID not found")
+
+    async def get_forum_postings(
+        self,
+        forum_id: Union[int, str],
+        *,
+        client_session: Optional[ClientSession] = None,
+    ) -> list[Posting]:
+        """Get all postings in a forum."""
 
     ###########################################################################
     # Accept terms and conditions                                             #
