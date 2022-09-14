@@ -15,18 +15,18 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""Partially reverse-engineered API for tickers on derstandard.at."""
+"""Unified API for tickers and forums."""
 
 
-__all__ = ("TickerAPI",)
+__all__ = ("DerStandardAPI",)
 
 
 import asyncio
-import concurrent.futures
+import concurrent
 import contextlib
 import itertools
 import time
-from typing import Any, AsyncContextManager, Iterator, Optional, Union
+from typing import Any, AsyncContextManager, Optional, Union
 
 from aiohttp import ClientSession
 
@@ -34,34 +34,15 @@ import dateutil.parser as dateparser
 
 import pytz
 
-from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
 from .dataclasses import Posting, Thread, User
+from .utils import chromedriver
 
 
-@contextlib.contextmanager
-def chromedriver() -> Iterator[webdriver.Chrome]:
-    """Create a webdriver for Chrome."""
-    try:
-        options = Options()
-        options.add_argument("--no-sandbox")  # type: ignore
-        options.add_argument("--headless")  # type: ignore
-        options.add_argument("--disable-gpu")  # type: ignore
-        options.add_argument("--disable-dev-shm-usage")  # type: ignore
-        options.add_argument("--window-size=1920,1080")  # type: ignore
-
-        driver = webdriver.Chrome(options=options)
-        driver.implicitly_wait(10)
-
-        yield driver
-    finally:
-        driver.quit()
-
-
-class TickerAPI:
-    """API methods for derstandard.at."""
+class DerStandardAPI:
+    """Unified API for tickers and forums."""
 
     def __init__(self) -> None:
         self._cookies: Optional[dict[str, str]] = None
@@ -74,6 +55,9 @@ class TickerAPI:
         """Create a client session with credentials."""
         return ClientSession(cookies=self._cookies)
 
+    ###########################################################################
+    # Ticker API                                                              #
+    ###########################################################################
     async def get_ticker_threads(
         self,
         ticker_id: Union[int, str],
@@ -171,6 +155,9 @@ class TickerAPI:
             for p in postings
         ]
 
+    ###########################################################################
+    # Accept terms and conditions                                             #
+    ###########################################################################
     async def update_cookies(self) -> None:
         """Update credentials and GDPR cookies."""
         loop = asyncio.get_event_loop()

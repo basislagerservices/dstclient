@@ -15,20 +15,20 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""Tests for the dstclient.ticker module."""
+"""Tests for the dstclient.api module."""
 
 
 import asyncio
 
 import pytest
 
-from dstclient import TickerAPI
+from dstclient import DerStandardAPI
 
 
 @pytest.fixture(scope="module")
 def api():
     """Initialize an API object with cookies."""
-    api = TickerAPI()
+    api = DerStandardAPI()
     asyncio.run(api.update_cookies())
 
     return api
@@ -36,7 +36,7 @@ def api():
 
 async def test_cookies():
     """Test if cookies can be retrieved."""
-    api = TickerAPI()
+    api = DerStandardAPI()
     await api.update_cookies()
     assert len(api._cookies) != 0
 
@@ -44,7 +44,7 @@ async def test_cookies():
 @pytest.mark.skip(reason="fails because of caching?")
 async def test_cookies_update():
     """Test if cookies can be retrieved multiple times."""
-    api = TickerAPI()
+    api = DerStandardAPI()
     await api.update_cookies()
     first = api._cookies
     await api.update_cookies()
@@ -67,7 +67,7 @@ async def test_get_thread_postings(api):
 async def test_get_ticker_threads_with_session(api, mocker):
     """Get all threads from an old live ticker."""
     async with api.session() as session:
-        smock = mocker.patch("dstclient.ticker.ClientSession")
+        smock = mocker.patch("dstclient.api.ClientSession")
         threads = await api.get_ticker_threads(
             ticker_id=1336696633613,
             client_session=session,
@@ -79,7 +79,7 @@ async def test_get_ticker_threads_with_session(api, mocker):
 async def test_get_thread_postings_with_session(api, mocker):
     """Get postings from a thread in an old live ticker."""
     async with api.session() as session:
-        smock = mocker.patch("dstclient.ticker.ClientSession")
+        smock = mocker.patch("dstclient.api.ClientSession")
         threads = await api.get_thread_postings(
             ticker_id=1336696633613,
             thread_id=26065423,
