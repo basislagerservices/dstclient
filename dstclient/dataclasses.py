@@ -67,7 +67,7 @@ class Posting:
     """Optional ID of a parent posting."""
     user: User
     """The user who posted this."""
-    thread_id: int
+    thread_id: Optional[int]
     """ID of the thread this posting belongs to."""
     published: dt.datetime
     """Datetime this posting was published."""

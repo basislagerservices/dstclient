@@ -164,45 +164,107 @@ class DerStandardAPI:
         client_session: Optional[ClientSession] = None,
     ) -> str:
         """Get the forum ID for an article."""
-        # TODO: Clarify if this works for non-cached requests and if it doesn't work,
-        #       then figure out what to use as the query. For now, the hash appears to
-        #       be constant for all forums.
         query = {
-            "operationName": "GetForumInfo",
             "variables": json.dumps(
                 {"contextUri": f"https://www.derstandard.at/story/{article_id}"}
             ),
-            "extensions": json.dumps(
-                {
-                    "persistedQuery": {
-                        "version": 1,
-                        "sha256Hash": "cb2d9227f7b2dfcce257d248adef0aa7d251a0b127fb5387af46abdd9103a53e",
+            "query": """
+                query GetForumInfo($contextUri: String!) {
+                    getForumByContextUri(contextUri: $contextUri) {
+                        id
+                        totalPostingCount
                     }
                 }
-            ),
+            """,
         }
         url = self.FURL("?" + urlencode(query))
 
-        # We make multiple requests. The first one might fail if the request is not
-        # cached, so we repeat it. The second one should work, but we just make more
-        # to be sure.
-        # TODO: Clarify if this is necessary and correct...
         async with self._session_context(client_session) as session:
-            for _ in range(5):
-                async with session.get(url) as resp:
-                    with contextlib.suppress(KeyError):
-                        data = await resp.json()
-                        return cast(str, data["data"]["getForumByContextUri"]["id"])
-
-        raise Exception("forum ID not found")
+            async with session.get(url) as resp:
+                response = await resp.json()
+                return cast(str, response["data"]["getForumByContextUri"]["id"])
 
     async def get_forum_postings(
         self,
-        forum_id: Union[int, str],
+        article_id: Union[int, str],
         *,
         client_session: Optional[ClientSession] = None,
     ) -> list[Posting]:
         """Get all postings in a forum."""
+
+        def nodequery(n: int) -> str:
+            """Create the recursive query to get replies."""
+            if not n:
+                return "id"
+            return f"""
+                id
+                lifecycleStatus
+                author {{id
+                  name
+                }}
+                title
+                text
+                reactions {{
+                  aggregated {{name value}}
+                }}
+                history {{
+                  created
+                }}
+                rootPostingId
+                replies {{{nodequery(n - 1)}}}
+            """
+
+        forum_id = await self._get_forum_id(article_id, client_session=client_session)
+
+        # TODO: Allow 32 levels like the JS implementation.
+        subquery = nodequery(18)
+        query = {
+            "variables": json.dumps({"id": forum_id, "first": 100_000}),
+            "query": f"""
+              query ThreadsByForumQuery($id: String!, $first: Int) {{
+                getForumRootPostings(getForumRootPostingsParams: {{forumId: $id, first: $first}}) {{
+                  edges {{
+                    node {{
+                      {subquery}
+                    }}
+                  }}
+                }}
+              }}
+            """,
+        }
+        url = self.FURL("?" + urlencode(query))
+
+        def linearize(edges: Any) -> Any:
+            """Traverse and linearize the reply tree."""
+            postings = [e for e in edges]
+            for e in edges:
+                postings += linearize(e["replies"])
+            return postings
+
+        async with self._session_context(client_session) as session:
+            async with session.get(url) as resp:
+                response = await resp.json()
+                root = [
+                    e["node"] for e in response["data"]["getForumRootPostings"]["edges"]
+                ]
+                raw_postings = linearize(root)
+
+        # Convert to dataclass
+        return [
+            Posting(
+                posting_id=p["id"],
+                parent_id=None if p["id"] == p["rootPostingId"] else p["rootPostingId"],
+                user=User(p["author"]["id"], p["author"]["name"]),
+                thread_id=None,
+                published=dateparser.parse(p["history"]["created"]),
+                upvotes=p["reactions"]["aggregated"][0]["value"],
+                downvotes=p["reactions"]["aggregated"][1]["value"],
+                title=p["title"] or None,
+                message=p["text"] or None,
+            )
+            for p in raw_postings
+            if p["lifecycleStatus"] == "Published"
+        ]
 
     ###########################################################################
     # Accept terms and conditions                                             #
