@@ -18,7 +18,7 @@
 """API implementation for derstandard.at."""
 
 
-__all__ = ("DerStandardAPI", "TickerAPI", "Posting", "Thread", "User")
+__all__ = ("DerStandardAPI", "Posting", "Thread", "User")
 
 
 from .api import DerStandardAPI
