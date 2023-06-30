@@ -62,7 +62,7 @@ class DerStandardAPI:
         return ClientSession(cookies=self._cookies, headers=headers)
 
     def _session_context(
-        self, client_session: Optional[ClientSession]
+        self, client_session: Optional[ClientSession] = None
     ) -> AsyncContextManager[ClientSession]:
         if client_session:
             return contextlib.nullcontext(client_session)
