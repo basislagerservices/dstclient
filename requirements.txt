@@ -2,3 +2,4 @@ aiohttp
 python-dateutil
 pytz
 selenium
+webdriver-manager
