@@ -38,7 +38,7 @@ import pytz
 
 from selenium.webdriver.common.by import By
 
-from .dataclasses import Posting, Thread, User
+from .types import TickerPosting, Thread, User
 from .utils import chromedriver
 
 
@@ -119,7 +119,7 @@ class DerStandardAPI:
         thread_id: Union[int, str],
         *,
         client_session: Optional[ClientSession] = None,
-    ) -> list[Posting]:
+    ) -> list[TickerPosting]:
         """Get all postings in a ticker thread."""
         postings = []
         page = await self._get_thread_postings_page(
@@ -140,7 +140,7 @@ class DerStandardAPI:
         # Remove duplicates.
         postings = list({p["pid"]: p for p in postings}.values())
         return [
-            Posting(
+            TickerPosting(
                 posting_id=p["pid"],
                 parent_id=p["ppid"],
                 user=User(user_id=p["cid"], name=p["cn"]),
@@ -152,118 +152,6 @@ class DerStandardAPI:
                 downvotes=p["vn"],
             )
             for p in postings
-        ]
-
-    ###########################################################################
-    # Forum API                                                               #
-    ###########################################################################
-    async def _get_forum_id(
-        self,
-        article_id: Union[int, str],
-        *,
-        client_session: Optional[ClientSession] = None,
-    ) -> str:
-        """Get the forum ID for an article."""
-        query = {
-            "variables": json.dumps(
-                {"contextUri": f"https://www.derstandard.at/story/{article_id}"}
-            ),
-            "query": """
-                query GetForumInfo($contextUri: String!) {
-                    getForumByContextUri(contextUri: $contextUri) {
-                        id
-                        totalPostingCount
-                    }
-                }
-            """,
-        }
-        url = self.FURL("?" + urlencode(query))
-
-        async with self._session_context(client_session) as session:
-            async with session.get(url) as resp:
-                response = await resp.json()
-                return cast(str, response["data"]["getForumByContextUri"]["id"])
-
-    async def get_forum_postings(
-        self,
-        article_id: Union[int, str],
-        *,
-        client_session: Optional[ClientSession] = None,
-    ) -> list[Posting]:
-        """Get all postings in a forum."""
-
-        def nodequery(n: int) -> str:
-            """Create the recursive query to get replies."""
-            if not n:
-                return "id"
-            return f"""
-                id
-                lifecycleStatus
-                author {{id
-                  name
-                }}
-                title
-                text
-                reactions {{
-                  aggregated {{name value}}
-                }}
-                history {{
-                  created
-                }}
-                rootPostingId
-                replies {{{nodequery(n - 1)}}}
-            """
-
-        forum_id = await self._get_forum_id(article_id, client_session=client_session)
-
-        # TODO: Allow 32 levels like the JS implementation.
-        subquery = nodequery(18)
-        query = {
-            "variables": json.dumps({"id": forum_id, "first": 100_000}),
-            "query": f"""
-              query ThreadsByForumQuery($id: String!, $first: Int) {{
-                getForumRootPostings(getForumRootPostingsParams: {{forumId: $id, first: $first}}) {{
-                  edges {{
-                    node {{
-                      {subquery}
-                    }}
-                  }}
-                }}
-              }}
-            """,
-        }
-        url = self.FURL("?" + urlencode(query))
-
-        def linearize(edges: Any) -> Any:
-            """Traverse and linearize the reply tree."""
-            postings = [e for e in edges]
-            for e in edges:
-                postings += linearize(e["replies"])
-            return postings
-
-        async with self._session_context(client_session) as session:
-            async with session.get(url) as resp:
-                response = await resp.json()
-                root = [
-                    e["node"] for e in response["data"]["getForumRootPostings"]["edges"]
-                ]
-                raw_postings = linearize(root)
-
-        # Convert to dataclass
-        return [
-            Posting(
-                posting_id=p["id"],
-                parent_id=None if p["id"] == p["rootPostingId"] else p["rootPostingId"],
-                user=User(p["author"]["id"], p["author"]["name"]),
-                thread_id=None,
-                published=dateparser.parse(p["history"]["created"]),
-                upvotes=p["reactions"]["aggregated"][0]["value"],
-                downvotes=p["reactions"]["aggregated"][1]["value"],
-                title=p["title"] or None,
-                message=p["text"] or None,
-            )
-            for p in raw_postings
-            if p["lifecycleStatus"] == "Published"
         ]
 
     ###########################################################################

@@ -1,5 +1,7 @@
 aiohttp
+aiosqlite
 python-dateutil
 pytz
 selenium
+sqlalchemy
 webdriver-manager

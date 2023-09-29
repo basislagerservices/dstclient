@@ -1,5 +1,5 @@
 #
-# Copyright 2021-2022 Basislager Services
+# Copyright 2021-2023 Basislager Services
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,11 +15,11 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""API implementation for derstandard.at."""
+"""Tests for the database types."""
 
 
-__all__ = ("DerStandardAPI", "Posting", "Thread", "User")
+import asyncio
 
+import pytest
 
-from .api import DerStandardAPI
-from .types import TickerPosting, Thread, User
+from dstclient.types import *
