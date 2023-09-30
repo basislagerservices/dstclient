@@ -30,7 +30,15 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from dstclient.types import type_registry, User, Ticker, Thread, TickerPosting
+from dstclient.types import (
+    type_registry,
+    User,
+    Ticker,
+    Thread,
+    TickerPosting,
+    FullUser,
+    DeletedUser,
+)
 
 
 def random_str(k: int) -> str:
@@ -64,14 +72,25 @@ async def empty_session(tmp_path):
 
 
 @pytest.fixture
-async def usergen():
-    """Create a random user."""
+async def fullusergen():
+    """Create a random full user."""
 
-    def factory() -> User:
+    def factory() -> FullUser:
         name = random_str(16)
         id = random.randrange(2**32)
-        user = User(id, name)
+        registered = dt.datetime.fromtimestamp(random.randrange(2**32)).date()
+        user = FullUser(id, name, registered)
         return user
+
+    return factory
+
+
+@pytest.fixture
+async def delusergen():
+    """Create a random deleted user."""
+
+    def factory() -> DeletedUser:
+        return DeletedUser(random.randrange(2**32))
 
     return factory
 
@@ -89,7 +108,7 @@ async def tickergen():
 
 
 @pytest.fixture
-async def threadgen(usergen, tickergen):
+async def threadgen(fullusergen, tickergen):
     """Create a random thread."""
 
     def factory(
@@ -100,7 +119,7 @@ async def threadgen(usergen, tickergen):
         if ticker is None:
             ticker = tickergen()
         if user is None:
-            user = usergen()
+            user = fullusergen()
 
         up = random.randrange(2**10)
         down = random.randrange(2**10)
@@ -122,7 +141,7 @@ async def threadgen(usergen, tickergen):
 
 
 @pytest.fixture
-async def tickerpostinggen(usergen, threadgen):
+async def tickerpostinggen(fullusergen, threadgen):
     """Create a random ticker posting."""
 
     def factory(
@@ -140,7 +159,7 @@ async def tickerpostinggen(usergen, threadgen):
 
         return TickerPosting(
             id=id,
-            user=usergen(),  # TODO
+            user=fullusergen(),  # TODO
             parent=None,  # TODO
             published=published,
             upvotes=random.randrange(2**10),

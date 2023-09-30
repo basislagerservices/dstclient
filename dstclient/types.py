@@ -25,12 +25,14 @@ __all__ = (
     "Ticker",
     "TickerPosting",
     "User",
+    "DeletedUser",
+    "FullUser",
 )
 
 import datetime as dt
 from typing import Optional, Union
 
-from sqlalchemy import ForeignKey, ForeignKeyConstraint
+from sqlalchemy import ForeignKey
 from sqlalchemy.orm import (
     mapped_column,
     registry,
@@ -46,20 +48,22 @@ type_registry = registry()
 
 @type_registry.mapped
 class User:
+    """Base class for active and deleted users.
+
+    This class is also used for partial users who have not been fully crawled.
+    """
+
     __tablename__ = "user"
 
-    def __init__(self, id: int, name: str) -> None:
+    def __init__(self, id: int) -> None:
         """Create a new user object."""
         self.id = id
-        self.name = name
 
     id: Mapped[int] = mapped_column(primary_key=True)
     """ID of the user."""
 
-    name: Mapped[str]
-    """Name of the user."""
-
-    # TODO: Add created date.
+    type: Mapped[str]
+    """Type of the user (deleted, full)."""
 
     postings: WriteOnlyMapped[list["TickerPosting"]] = relationship(
         back_populates="user"
@@ -68,6 +72,49 @@ class User:
 
     threads: WriteOnlyMapped[list["Thread"]] = relationship(back_populates="user")
     """Threads written by this user."""
+
+    __mapper_args__ = {
+        "polymorphic_identity": "user",
+        "polymorphic_on": "type",
+    }
+
+
+@type_registry.mapped
+class DeletedUser(User):
+    """A user who was already deleted when first added to the database."""
+
+    __mapper_args__ = {
+        "polymorphic_identity": "deleted",
+    }
+
+
+@type_registry.mapped
+class FullUser(User):
+    """A user who was active when initially added to the database.
+
+    The user might have been deleted later, but we still have all the
+    basic information about them.
+    """
+
+    def __init__(self, id: int, name: str, registered: dt.date) -> None:
+        """Create a new full user object."""
+        super().__init__(id)
+        self.name = name
+        self.registered = registered
+        self.deleted = None
+
+    name: Mapped[str] = mapped_column(nullable=True)
+    """Name of the user."""
+
+    registered: Mapped[dt.date] = mapped_column(nullable=True)
+    """Date when the user was registered."""
+
+    deleted: Mapped[Optional[dt.datetime]]
+    """First time this user was encountered as deleted."""
+
+    __mapper_args__ = {
+        "polymorphic_identity": "full",
+    }
 
 
 @type_registry.mapped
@@ -140,12 +187,12 @@ class Thread:
 
     ticker_id: Mapped[int] = mapped_column(ForeignKey("ticker.id"))
     """ID of the ticker this thread belongs to."""
-    ticker: Mapped[Ticker] = relationship()
+    ticker: Mapped[Ticker] = relationship(lazy="immediate")
     """The ticker this thread belongs to."""
 
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
     """ID of the user who has published this thread."""
-    user: Mapped[User] = relationship()
+    user: Mapped[User] = relationship(lazy="immediate")
     """The user who posted this."""
 
     upvotes: Mapped[int]
@@ -154,10 +201,10 @@ class Thread:
     downvotes: Mapped[int]
     """Number of downvotes if fetched."""
 
-    title: Mapped[Optional[str]] = None
+    title: Mapped[Optional[str]]
     """Title of the thread posting."""
 
-    message: Mapped[Optional[str]] = None
+    message: Mapped[Optional[str]]
     """Content of the thread posting."""
 
     postings: WriteOnlyMapped[list["TickerPosting"]] = relationship(
@@ -237,12 +284,14 @@ class Posting:
 
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
     """ID of the user who has published this posting."""
-    user: Mapped[User] = relationship()
+    user: Mapped[User] = relationship(lazy="immediate")
     """The user who posted this."""
 
     parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("posting.id"))
     """Optional ID of a parent posting."""
-    parent: Mapped[Optional["Posting"]] = relationship(remote_side=[id])
+    parent: Mapped[Optional["Posting"]] = relationship(
+        remote_side=[id], lazy="immediate"
+    )
     """Optional parent posting."""
 
     published: Mapped[dt.datetime]
@@ -254,10 +303,10 @@ class Posting:
     downvotes: Mapped[int]
     """Number of downvotes if fetched."""
 
-    title: Mapped[Optional[str]] = None
+    title: Mapped[Optional[str]]
     """Title of the posting."""
 
-    message: Mapped[Optional[str]] = None
+    message: Mapped[Optional[str]]
     """Content of the posting."""
 
     __mapper_args__ = {
@@ -269,8 +318,6 @@ class Posting:
 @type_registry.mapped
 class TickerPosting(Posting):
     """Posting in a ticker."""
-
-    __tablename__ = "tickerposting"
 
     def __init__(
         self,
@@ -294,12 +341,9 @@ class TickerPosting(Posting):
         else:
             raise TypeError("invalid type for thread")
 
-    id: Mapped[int] = mapped_column(ForeignKey("posting.id"), primary_key=True)
-    """ID of this posting."""
-
-    thread_id: Mapped[int] = mapped_column(ForeignKey("thread.id"))
+    thread_id: Mapped[int] = mapped_column(ForeignKey("thread.id"), nullable=True)
     """ID of the thread this posting belongs to."""
-    thread: Mapped[Thread] = relationship()
+    thread: Mapped[Thread] = relationship(lazy="immediate")
     """The thread where this posting was published."""
 
     __mapper_args__ = {
@@ -310,8 +354,6 @@ class TickerPosting(Posting):
 @type_registry.mapped
 class ArticlePosting(Posting):
     """Posting in an article forum."""
-
-    __tablename__ = "articleposting"
 
     def __init__(
         self,
@@ -328,19 +370,16 @@ class ArticlePosting(Posting):
         super().__init__(
             id, user, parent, published, upvotes, downvotes, title, message
         )
-        if isinstance(article, Thread):
+        if isinstance(article, Article):
             self.article = article
         elif isinstance(article, int):
             self.article_id = article
         else:
             raise TypeError("invalid type for article")
 
-    id: Mapped[int] = mapped_column(ForeignKey("posting.id"), primary_key=True)
-    """ID of this posting."""
-
-    article_id: Mapped[int] = mapped_column(ForeignKey("article.id"))
+    article_id: Mapped[int] = mapped_column(ForeignKey("article.id"), nullable=True)
     """ID of the article this posting belongs to."""
-    article: Mapped[Article] = relationship()
+    article: Mapped[Article] = relationship(lazy="immediate")
     """The article where this posting was published."""
 
     __mapper_args__ = {

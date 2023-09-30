@@ -25,17 +25,21 @@ from sqlalchemy.exc import IntegrityError
 from dstclient.types import *
 
 
-async def test_create_user(empty_session, usergen):
+async def test_create_user(empty_session, fullusergen, delusergen):
     """Create a new user, insert it and read it back."""
-    user = usergen()
+    user = fullusergen()
+    deluser = delusergen()
     async with empty_session() as session, session.begin():
         session.add(user)
+        session.add(deluser)
 
     async with empty_session() as session, session.begin():
-        result = await session.get(User, user.id)
-
+        result = await session.get(FullUser, user.id)
         assert result.id == user.id
         assert result.name == user.name
+
+        result = await session.get(DeletedUser, deluser.id)
+        assert result.id == deluser.id
 
 
 async def test_create_ticker(empty_session, tickergen):
@@ -59,7 +63,6 @@ async def test_create_thread(empty_session, threadgen):
 
     async with empty_session() as session, session.begin():
         result = await session.get(Thread, thread.id)
-        await session.refresh(result, ["ticker", "user"])
 
         assert result.id == thread.id
         assert result.published == thread.published
@@ -73,9 +76,9 @@ async def test_create_thread(empty_session, threadgen):
         assert result.message == thread.message
 
 
-async def test_create_thread_userid(empty_session, threadgen, usergen):
+async def test_create_thread_userid(empty_session, threadgen, fullusergen):
     """Create a thread with an existing numerical user ID and read it back."""
-    user = usergen()
+    user = fullusergen()
     thread = threadgen(user=user.id)
 
     async with empty_session() as session, session.begin():
@@ -84,7 +87,6 @@ async def test_create_thread_userid(empty_session, threadgen, usergen):
 
     async with empty_session() as session, session.begin():
         result = await session.get(Thread, thread.id)
-        await session.refresh(result, ["ticker", "user"])
 
         assert result.user_id == user.id
         assert result.user.id == user.id
@@ -112,7 +114,6 @@ async def test_create_thread_tickerid(empty_session, threadgen, tickergen):
 
     async with empty_session() as session, session.begin():
         result = await session.get(Thread, thread.id)
-        await session.refresh(result, ["ticker", "user"])
 
         assert result.ticker_id == ticker.id
         assert result.ticker.id == ticker.id

@@ -25,10 +25,8 @@ import asyncio
 import concurrent
 import contextlib
 import itertools
-import json
 import time
 from typing import Any, AsyncContextManager, Optional, Union, cast
-from urllib.parse import urlencode
 
 from aiohttp import ClientSession
 
@@ -84,12 +82,12 @@ class DerStandardAPI:
             async with session.get(url) as resp:
                 return [
                     Thread(
-                        thread_id=t["id"],
+                        id=t["id"],
                         published=dateparser.parse(t["ctd"]).astimezone(pytz.utc),
-                        ticker_id=int(ticker_id),
+                        ticker=int(ticker_id),
                         title=t.get("hl") or None,
                         message=t.get("cm") or None,
-                        user=User(user_id=t["cid"], name=t["cn"]),
+                        user=User(id=t["cid"], name=t["cn"]),
                         upvotes=t["vp"],
                         downvotes=t["vn"],
                     )
@@ -141,10 +139,10 @@ class DerStandardAPI:
         postings = list({p["pid"]: p for p in postings}.values())
         return [
             TickerPosting(
-                posting_id=p["pid"],
-                parent_id=p["ppid"],
-                user=User(user_id=p["cid"], name=p["cn"]),
-                thread_id=int(thread_id),
+                id=int(p["pid"]),
+                parent=p["ppid"],
+                user=User(id=int(p["cid"]), name=p["cn"]),
+                thread=int(thread_id),
                 published=dateparser.parse(p["cd"]).astimezone(pytz.utc),
                 title=p.get("hl") or None,
                 message=p.get("tx") or None,
