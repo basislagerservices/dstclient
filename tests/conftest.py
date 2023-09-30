@@ -15,4 +15,139 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""Configuration for unit tests."""
+"""Configuration and fixtures for unit tests."""
+
+import datetime as dt
+import random
+import string
+from typing import Union
+
+from lorem_text import lorem
+
+import pytest
+
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+
+from dstclient.types import type_registry, User, Ticker, Thread, TickerPosting
+
+
+def random_str(k: int) -> str:
+    """Create a random string."""
+    return "".join(random.choices(string.ascii_letters, k=k))
+
+
+@event.listens_for(Engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    """Set the foreign_key pragma to check for nonexisting foreign keys."""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
+@pytest.fixture
+async def empty_session(tmp_path):
+    """Create an empty database with initialized tables.
+
+    The result is the session factory.
+    """
+    engine = create_async_engine(f"sqlite+aiosqlite:////{tmp_path}/db.sql")
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(type_registry.metadata.drop_all)
+        await conn.run_sync(type_registry.metadata.create_all)
+
+    yield async_session
+
+    await engine.dispose()
+
+
+@pytest.fixture
+async def usergen():
+    """Create a random user."""
+
+    def factory() -> User:
+        name = random_str(16)
+        id = random.randrange(2**32)
+        user = User(id, name)
+        return user
+
+    return factory
+
+
+@pytest.fixture
+async def tickergen():
+    """Create a random ticker."""
+
+    def factory() -> Ticker:
+        id = random.randrange(2**32)
+        published = dt.datetime.fromtimestamp(random.randrange(2**32))
+        return Ticker(id, published)
+
+    return factory
+
+
+@pytest.fixture
+async def threadgen(usergen, tickergen):
+    """Create a random thread."""
+
+    def factory(
+        ticker: Union[None, int, Ticker] = None, user: Union[None, int, User] = None
+    ) -> Thread:
+        id = random.randrange(2**32)
+        published = dt.datetime.fromtimestamp(random.randrange(2**32))
+        if ticker is None:
+            ticker = tickergen()
+        if user is None:
+            user = usergen()
+
+        up = random.randrange(2**10)
+        down = random.randrange(2**10)
+        title = random.choice([None, random_str(16)])
+        message = random.choice([None, lorem.sentence()])
+
+        return Thread(
+            id=id,
+            published=published,
+            ticker=ticker,
+            user=user,
+            upvotes=up,
+            downvotes=down,
+            title=title,
+            message=message,
+        )
+
+    return factory
+
+
+@pytest.fixture
+async def tickerpostinggen(usergen, threadgen):
+    """Create a random ticker posting."""
+
+    def factory(
+        ticker: Union[None, int, Ticker] = None,
+        thread: Union[None, int, Thread] = None,
+        user: Union[None, int, User] = None,
+    ) -> TickerPosting:
+        # TODO: Support more tests
+        assert ticker is None
+        assert thread is None
+        assert user is None
+
+        id = random.randrange(2**32)
+        published = dt.datetime.fromtimestamp(random.randrange(2**32))
+
+        return TickerPosting(
+            id=id,
+            user=usergen(),  # TODO
+            parent=None,  # TODO
+            published=published,
+            upvotes=random.randrange(2**10),
+            downvotes=random.randrange(2**10),
+            title=random.choice([None, random_str(16)]),
+            message=random.choice([None, lorem.sentence()]),
+            thread=threadgen(),
+        )
+
+    return factory

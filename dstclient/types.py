@@ -19,17 +19,18 @@
 
 __all__ = (
     "Article",
+    "ArticlePosting",
+    "Posting",
     "Thread",
     "Ticker",
     "TickerPosting",
-    "ArticlePosting",
     "User",
 )
 
 import datetime as dt
-from typing import Optional
+from typing import Optional, Union
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, ForeignKeyConstraint
 from sqlalchemy.orm import (
     mapped_column,
     registry,
@@ -47,11 +48,18 @@ type_registry = registry()
 class User:
     __tablename__ = "user"
 
+    def __init__(self, id: int, name: str) -> None:
+        """Create a new user object."""
+        self.id = id
+        self.name = name
+
     id: Mapped[int] = mapped_column(primary_key=True)
     """ID of the user."""
 
     name: Mapped[str]
     """Name of the user."""
+
+    # TODO: Add created date.
 
     postings: WriteOnlyMapped[list["TickerPosting"]] = relationship(
         back_populates="user"
@@ -66,6 +74,11 @@ class User:
 class Ticker:
     __tablename__ = "ticker"
 
+    def __init__(self, id: int, published: dt.datetime) -> None:
+        """Create a new ticker object."""
+        self.id = id
+        self.published = published
+
     id: Mapped[int] = mapped_column(primary_key=True)
     """ID of this ticker."""
 
@@ -79,6 +92,45 @@ class Ticker:
 @type_registry.mapped
 class Thread:
     __tablename__ = "thread"
+
+    def __init__(
+        self,
+        id: int,
+        published: dt.datetime,
+        ticker: Union[int, Ticker],
+        user: Union[int, User],
+        upvotes: int,
+        downvotes: int,
+        title: Optional[str],
+        message: Optional[str],
+    ) -> None:
+        """Create a new thread object.
+
+        The ticker and the user who created it can be passed with the ID or the
+        object itself. If only the ID is passed, then the entry must already exist in
+        the database when the object is inserted.
+        """
+
+        if isinstance(ticker, Ticker):
+            self.ticker = ticker
+        elif isinstance(ticker, int):
+            self.ticker_id = ticker
+        else:
+            raise TypeError("invalid type for ticker")
+
+        if isinstance(user, User):
+            self.user = user
+        elif isinstance(user, int):
+            self.user_id = user
+        else:
+            raise TypeError("invalid type for user")
+
+        self.id = id
+        self.published = published
+        self.upvotes = upvotes
+        self.downvotes = downvotes
+        self.title = title
+        self.message = message
 
     id: Mapped[int] = mapped_column(primary_key=True)
     """ID of this thread."""
@@ -118,6 +170,11 @@ class Thread:
 class Article:
     __tablename__ = "article"
 
+    def __init__(self, id: int, published: dt.datetime) -> None:
+        """Create a new article."""
+        self.id = id
+        self.published = published
+
     id: Mapped[int] = mapped_column(primary_key=True)
     """ID of this article."""
 
@@ -125,7 +182,7 @@ class Article:
     """Datetime this article was published."""
 
     postings: WriteOnlyMapped[list["ArticlePosting"]] = relationship(
-        back_populates="thread"
+        back_populates="article"
     )
     """Postings in the article forum."""
 
@@ -135,6 +192,42 @@ class Posting:
     """Base class for postings."""
 
     __tablename__ = "posting"
+
+    def __init__(
+        self,
+        id: int,
+        user: Union[int, User],
+        parent: Union[None, int, "Posting"],
+        published: dt.datetime,
+        upvotes: int,
+        downvotes: int,
+        title: Optional[str],
+        message: Optional[str],
+    ) -> None:
+        """Do not use this directly."""
+
+        if isinstance(user, User):
+            self.user = user
+        elif isinstance(user, int):
+            self.user_id = user
+        else:
+            raise TypeError("invalid type for user")
+
+        if isinstance(parent, Posting):
+            self.parent = parent
+        elif isinstance(parent, int):
+            self.parent_id = parent
+        elif parent is None:
+            pass
+        else:
+            raise TypeError("invalid type for parent")
+
+        self.id = id
+        self.published = published
+        self.upvotes = upvotes
+        self.downvotes = downvotes
+        self.title = title
+        self.message = message
 
     id: Mapped[int] = mapped_column(primary_key=True)
     """ID of this posting."""
@@ -179,6 +272,28 @@ class TickerPosting(Posting):
 
     __tablename__ = "tickerposting"
 
+    def __init__(
+        self,
+        id: int,
+        user: Union[int, User],
+        parent: Union[None, int, "Posting"],
+        published: dt.datetime,
+        upvotes: int,
+        downvotes: int,
+        title: Optional[str],
+        message: Optional[str],
+        thread: Union[int, Thread],
+    ) -> None:
+        super().__init__(
+            id, user, parent, published, upvotes, downvotes, title, message
+        )
+        if isinstance(thread, Thread):
+            self.thread = thread
+        elif isinstance(thread, int):
+            self.thread_id = thread
+        else:
+            raise TypeError("invalid type for thread")
+
     id: Mapped[int] = mapped_column(ForeignKey("posting.id"), primary_key=True)
     """ID of this posting."""
 
@@ -198,12 +313,34 @@ class ArticlePosting(Posting):
 
     __tablename__ = "articleposting"
 
+    def __init__(
+        self,
+        id: int,
+        user: Union[int, User],
+        parent: Union[None, int, "Posting"],
+        published: dt.datetime,
+        upvotes: int,
+        downvotes: int,
+        title: Optional[str],
+        message: Optional[str],
+        article: Union[int, Article],
+    ) -> None:
+        super().__init__(
+            id, user, parent, published, upvotes, downvotes, title, message
+        )
+        if isinstance(article, Thread):
+            self.article = article
+        elif isinstance(article, int):
+            self.article_id = article
+        else:
+            raise TypeError("invalid type for article")
+
     id: Mapped[int] = mapped_column(ForeignKey("posting.id"), primary_key=True)
     """ID of this posting."""
 
     article_id: Mapped[int] = mapped_column(ForeignKey("article.id"))
     """ID of the article this posting belongs to."""
-    article: Mapped[Thread] = relationship()
+    article: Mapped[Article] = relationship()
     """The article where this posting was published."""
 
     __mapper_args__ = {
