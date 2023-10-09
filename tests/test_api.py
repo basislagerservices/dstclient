@@ -19,6 +19,8 @@
 
 
 import asyncio
+import datetime as dt
+import pytz
 
 import pytest
 
@@ -87,3 +89,19 @@ async def test_get_thread_postings_with_session(api, mocker):
         )
         assert smock.call_count == 0
     assert len(threads) == 8
+
+
+async def test_api_database(api, tickergen):
+    """Test the internal database for the API."""
+    ticker = tickergen()
+    async with api.db_session() as session, session.begin():
+        session.add(ticker)
+
+
+async def test_get_ticker(api):
+    """Get ticker information."""
+    ticker = await api.get_ticker(ticker_id=1336696633613)
+    assert ticker.id == 1336696633613
+    assert ticker.last_modified.replace(tzinfo=None) == dt.datetime(
+        2012, 5, 13, 17, 59, 36, 130000
+    )

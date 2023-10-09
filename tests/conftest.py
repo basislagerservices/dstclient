@@ -101,8 +101,8 @@ async def tickergen():
 
     def factory() -> Ticker:
         id = random.randrange(2**32)
-        published = dt.datetime.fromtimestamp(random.randrange(2**32))
-        return Ticker(id, published)
+        last_modified = dt.datetime.fromtimestamp(random.randrange(2**32))
+        return Ticker(id, last_modified)
 
     return factory
 

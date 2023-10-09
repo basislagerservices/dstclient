@@ -121,16 +121,16 @@ class FullUser(User):
 class Ticker:
     __tablename__ = "ticker"
 
-    def __init__(self, id: int, published: dt.datetime) -> None:
+    def __init__(self, id: int, last_modified: dt.datetime) -> None:
         """Create a new ticker object."""
         self.id = id
-        self.published = published
+        self.last_modified = last_modified
 
     id: Mapped[int] = mapped_column(primary_key=True)
     """ID of this ticker."""
 
-    published: Mapped[dt.datetime]
-    """Datetime this ticker was published."""
+    last_modified: Mapped[dt.datetime]
+    """Datetime this ticker was last modified."""
 
     threads: WriteOnlyMapped[list["Thread"]] = relationship(back_populates="ticker")
     """Threads in this ticker."""
