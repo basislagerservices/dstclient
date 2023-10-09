@@ -33,13 +33,7 @@ import datetime as dt
 from typing import Optional, Union
 
 from sqlalchemy import ForeignKey
-from sqlalchemy.orm import (
-    mapped_column,
-    registry,
-    Mapped,
-    relationship,
-    WriteOnlyMapped,
-)
+from sqlalchemy.orm import mapped_column, registry, Mapped, relationship
 
 
 # Type registry for dataclasses.
@@ -65,12 +59,10 @@ class User:
     type: Mapped[str]
     """Type of the user (deleted, full)."""
 
-    postings: WriteOnlyMapped[list["TickerPosting"]] = relationship(
-        back_populates="user"
-    )
+    postings: Mapped[list["TickerPosting"]] = relationship(back_populates="user")
     """Postings written by this user."""
 
-    threads: WriteOnlyMapped[list["Thread"]] = relationship(back_populates="user")
+    threads: Mapped[list["Thread"]] = relationship(back_populates="user")
     """Threads written by this user."""
 
     __mapper_args__ = {
@@ -132,7 +124,7 @@ class Ticker:
     last_modified: Mapped[dt.datetime]
     """Datetime this ticker was last modified."""
 
-    threads: WriteOnlyMapped[list["Thread"]] = relationship(back_populates="ticker")
+    threads: Mapped[list["Thread"]] = relationship(back_populates="ticker")
     """Threads in this ticker."""
 
 
@@ -207,9 +199,7 @@ class Thread:
     message: Mapped[Optional[str]]
     """Content of the thread posting."""
 
-    postings: WriteOnlyMapped[list["TickerPosting"]] = relationship(
-        back_populates="thread"
-    )
+    postings: Mapped[list["TickerPosting"]] = relationship(back_populates="thread")
     """Postings in this thread."""
 
 
@@ -228,9 +218,7 @@ class Article:
     published: Mapped[dt.datetime]
     """Datetime this article was published."""
 
-    postings: WriteOnlyMapped[list["ArticlePosting"]] = relationship(
-        back_populates="article"
-    )
+    postings: Mapped[list["ArticlePosting"]] = relationship(back_populates="article")
     """Postings in the article forum."""
 
 

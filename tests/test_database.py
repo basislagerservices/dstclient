@@ -130,6 +130,19 @@ async def test_create_thread_tickerid_error(empty_session, threadgen):
     assert "FOREIGN KEY" in str(excinfo.value)
 
 
+async def test_update_ticker_threads(empty_session, tickergen, threadgen):
+    """Create multiple threads in the same ticker and them back."""
+    ticker = tickergen()
+    threads = [threadgen(ticker=ticker) for _ in range(8)]
+    async with empty_session() as session, session.begin():
+        session.add(ticker)
+        session.add_all(threads)
+
+        result = await session.get(Ticker, ticker.id, populate_existing=True)
+        await session.refresh(result, attribute_names=["threads"])
+        assert {t.id for t in result.threads} == {t.id for t in threads}
+
+
 async def test_create_tickerposting(empty_session, tickerpostinggen):
     """Create a ticker posting and read it back."""
     posting = tickerpostinggen()

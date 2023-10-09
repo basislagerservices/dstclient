@@ -78,7 +78,12 @@ class DerStandardAPI:
 
         # Initialize tables.
         # TODO: Not sure if we should do this for every engine or only for the internal one.
-        asyncio.run(create_tables(db_engine))
+        # TODO: This is hacky...
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(create_tables(db_engine))
+        else:
+            loop.run_until_complete(create_tables(db_engine))
 
         self._db_engine = db_engine
         self._db_session = async_sessionmaker(self._db_engine, expire_on_commit=False)
