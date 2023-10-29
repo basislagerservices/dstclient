@@ -18,6 +18,7 @@
 """Utils for other modules."""
 
 import contextlib
+import time
 from typing import Iterator
 
 from selenium import webdriver

@@ -35,6 +35,6 @@ setup(
     author_email="services@basislager.space",
     url="https://basislager.space",
     packages=["dstclient"],
-    package_data={"dstclient": ["py.typed"]},
+    package_data={"dstclient": ["py.typed", "schema.graphql"]},
     install_requires=requirements,
 )

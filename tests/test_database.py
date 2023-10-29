@@ -76,69 +76,29 @@ async def test_create_thread(empty_session, threadgen):
         assert result.message == thread.message
 
 
-async def test_create_thread_userid(empty_session, threadgen, fullusergen):
-    """Create a thread with an existing numerical user ID and read it back."""
-    user = fullusergen()
-    thread = threadgen(user=user.id)
-
-    async with empty_session() as session, session.begin():
-        session.add(user)
-        session.add(thread)
-
-    async with empty_session() as session, session.begin():
-        result = await session.get(Thread, thread.id)
-
-        assert result.user_id == user.id
-        assert result.user.id == user.id
-
-
-async def test_create_thread_userid_error(empty_session, threadgen):
-    """Adding a thread with a made up user ID should create an error."""
-    thread = threadgen(user=42)
-
-    with pytest.raises(IntegrityError) as excinfo:
-        async with empty_session() as session, session.begin():
-            session.add(thread)
-
-    assert "FOREIGN KEY" in str(excinfo.value)
-
-
-async def test_create_thread_tickerid(empty_session, threadgen, tickergen):
-    """Create a thread with an existing numerical ticker ID and read it back."""
-    ticker = tickergen()
-    thread = threadgen(ticker=ticker.id)
-
-    async with empty_session() as session, session.begin():
-        session.add(ticker)
-        session.add(thread)
-
-    async with empty_session() as session, session.begin():
-        result = await session.get(Thread, thread.id)
-
-        assert result.ticker_id == ticker.id
-        assert result.ticker.id == ticker.id
-
-
-async def test_create_thread_tickerid_error(empty_session, threadgen):
-    """Adding a thread with a made up ticker ID should create an error."""
-    thread = threadgen(ticker=42)
-
-    with pytest.raises(IntegrityError) as excinfo:
-        async with empty_session() as session, session.begin():
-            session.add(thread)
-
-    assert "FOREIGN KEY" in str(excinfo.value)
-
-
 async def test_update_ticker_threads(empty_session, tickergen, threadgen):
     """Create multiple threads in the same ticker and them back."""
     ticker = tickergen()
     threads = [threadgen(ticker=ticker) for _ in range(8)]
     async with empty_session() as session, session.begin():
-        session.add(ticker)
         session.add_all(threads)
 
-        result = await session.get(Ticker, ticker.id, populate_existing=True)
+    async with empty_session() as session, session.begin():
+        result = await session.get(Ticker, ticker.id)
+        await session.refresh(result, attribute_names=["threads"])
+        assert {t.id for t in result.threads} == {t.id for t in threads}
+
+
+async def test_append_ticker_threads(empty_session, tickergen, threadgen):
+    """Append threads through the backref of the ticker."""
+    ticker = tickergen()
+    threads = [threadgen(ticker=ticker) for _ in range(8)]
+    async with empty_session() as session, session.begin():
+        session.add(ticker)
+        ticker.threads.extend(threads)
+
+    async with empty_session() as session, session.begin():
+        result = await session.get(Ticker, ticker.id)
         await session.refresh(result, attribute_names=["threads"])
         assert {t.id for t in result.threads} == {t.id for t in threads}
 

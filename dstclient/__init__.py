@@ -18,8 +18,29 @@
 """API implementation for derstandard.at."""
 
 
-__all__ = ("DerStandardAPI", "Posting", "Thread", "User")
+__all__ = (
+    "DerStandardAPI",
+    "Article",
+    "ArticlePosting",
+    "Posting",
+    "Thread",
+    "Ticker",
+    "TickerPosting",
+    "User",
+    "DeletedUser",
+    "FullUser",
+)
 
 
 from .api import DerStandardAPI
-from .types import TickerPosting, Thread, User
+from .types import (
+    Article,
+    ArticlePosting,
+    Posting,
+    Thread,
+    Ticker,
+    TickerPosting,
+    User,
+    DeletedUser,
+    FullUser,
+)

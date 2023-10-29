@@ -24,7 +24,7 @@ import pytz
 
 import pytest
 
-from dstclient import DerStandardAPI
+from dstclient import DerStandardAPI, DeletedUser, FullUser
 
 
 @pytest.fixture(scope="module")
@@ -54,54 +54,40 @@ async def test_cookies_update():
     assert first != second
 
 
+async def test_get_ticker(api):
+    """Get ticker information."""
+    ticker = await api.get_ticker(ticker_id=1336696633613)
+    assert ticker.id == 1336696633613
+    assert ticker.last_modified == dt.datetime(
+        2012, 5, 13, 17, 59, 36, 130000
+    ).astimezone(pytz.utc)
+
+
 async def test_get_ticker_threads(api):
     """Get all threads from an old live ticker."""
-    threads = await api.get_ticker_threads(ticker_id=1336696633613)
+    ticker = await api.get_ticker(ticker_id=1336696633613)
+    threads = await api.get_ticker_threads(ticker)
     assert len(threads) == 96
 
 
 async def test_get_thread_postings(api):
     """Get postings from a thread in an old live ticker."""
-    threads = await api.get_thread_postings(ticker_id=1336696633613, thread_id=26065423)
-    assert len(threads) == 8
-
-
-async def test_get_ticker_threads_with_session(api, mocker):
-    """Get all threads from an old live ticker."""
-    async with api.session() as session:
-        smock = mocker.patch("dstclient.api.ClientSession")
-        threads = await api.get_ticker_threads(
-            ticker_id=1336696633613,
-            client_session=session,
-        )
-        assert smock.call_count == 0
-    assert len(threads) == 96
-
-
-async def test_get_thread_postings_with_session(api, mocker):
-    """Get postings from a thread in an old live ticker."""
-    async with api.session() as session:
-        smock = mocker.patch("dstclient.api.ClientSession")
-        threads = await api.get_thread_postings(
-            ticker_id=1336696633613,
-            thread_id=26065423,
-            client_session=session,
-        )
-        assert smock.call_count == 0
-    assert len(threads) == 8
-
-
-async def test_api_database(api, tickergen):
-    """Test the internal database for the API."""
-    ticker = tickergen()
-    async with api.db_session() as session, session.begin():
-        session.add(ticker)
-
-
-async def test_get_ticker(api):
-    """Get ticker information."""
     ticker = await api.get_ticker(ticker_id=1336696633613)
-    assert ticker.id == 1336696633613
-    assert ticker.last_modified.replace(tzinfo=None) == dt.datetime(
-        2012, 5, 13, 17, 59, 36, 130000
-    )
+    threads = {t.id: t for t in await api.get_ticker_threads(ticker)}
+    postings = await api.get_thread_postings(threads[26066484])
+    assert len(postings) == 36
+
+
+async def test_get_user_full(api):
+    """Get a user's information."""
+    user = await api.get_user(legacy_id=228825)
+    assert isinstance(user, FullUser)
+    assert user.id == 228825
+    assert user.name == "Winston Smith."
+
+
+async def test_get_user_deleted(api):
+    """Get a user's information."""
+    user = await api.get_user(legacy_id=738967)
+    assert isinstance(user, DeletedUser)
+    assert user.id == 738967

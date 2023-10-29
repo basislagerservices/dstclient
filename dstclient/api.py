@@ -23,13 +23,20 @@ __all__ = ("DerStandardAPI",)
 
 import asyncio
 import concurrent
-import contextlib
 import datetime as dt
+import json
+import os
 import itertools
 import time
-from typing import Any, AsyncContextManager, Optional, Union
+from typing import Any, Optional, SupportsInt
 
 from aiohttp import ClientSession
+
+from async_lru import alru_cache
+
+from gql import Client, gql
+from gql.transport.aiohttp import AIOHTTPTransport
+from gql.transport.exceptions import TransportQueryError
 
 import dateutil.parser as dateparser
 
@@ -37,179 +44,133 @@ import pytz
 
 from selenium.webdriver.common.by import By
 
-from sqlalchemy import event, Engine
-from sqlalchemy.ext.asyncio import (
-    async_sessionmaker,
-    AsyncSession,
-    create_async_engine,
-    AsyncEngine,
-)
-
-from .types import Ticker, TickerPosting, Thread, FullUser, DeletedUser, type_registry
+from .types import Ticker, TickerPosting, Thread, DeletedUser, FullUser, User
 from .utils import chromedriver
 
 
-def set_sqlite_pragma(dbapi_connection: Any, connection_record: Any) -> None:
-    """Set the foreign_keys pragma for SQLite databases."""
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
-
-
-async def create_tables(engine: AsyncEngine) -> None:
-    """Create tables in the database."""
-    async with engine.begin() as conn:
-        await conn.run_sync(type_registry.metadata.create_all)
-
-
 class DerStandardAPI:
-    """Unified API for tickers and forums."""
+    """Unified API for tickers and forums.
 
-    def __init__(self, db_engine: Optional[AsyncEngine] = None) -> None:
+    All API functions ensure that the returned objects are complete in the sense
+    that they can immediately be inserted into a database.
+    """
+
+    def __init__(self) -> None:
         self._cookies: Optional[dict[str, str]] = None
 
-        # Use an in-memory sqlite engine if none is specified.
-        if db_engine is None:
-            db_engine = create_async_engine(f"sqlite+aiosqlite://")
-
-        # Ensure that the foreign_key pragma is set for sqlite.
-        if db_engine.name == "sqlite":
-            event.listen(Engine, "connect", set_sqlite_pragma)
-
-        # Initialize tables.
-        # TODO: Not sure if we should do this for every engine or only for the internal one.
-        # TODO: This is hacky...
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            loop.create_task(create_tables(db_engine))
-        else:
-            loop.run_until_complete(create_tables(db_engine))
-
-        self._db_engine = db_engine
-        self._db_session = async_sessionmaker(self._db_engine, expire_on_commit=False)
+        # GraphQL transport and schema
+        with open(os.path.join(os.path.dirname(__file__), "schema.graphql")) as fp:
+            self._schema = fp.read()
 
     def TURL(self, tail: str) -> str:
         """Construct an URL for a ticker API request."""
         return "https://www.derstandard.at/jetzt/api/" + tail
-
-    def FURL(self, tail: str) -> str:
-        """Construct an URL for a forum API request."""
-        return "https://capi.ds.at/forum-serve-graphql/v1/" + tail
 
     def session(self) -> ClientSession:
         """Create a client session with credentials."""
         headers = {"content-type": "application/json"}
         return ClientSession(cookies=self._cookies, headers=headers)
 
-    def _session_context(
-        self, client_session: Optional[ClientSession] = None
-    ) -> AsyncContextManager[ClientSession]:
-        if client_session:
-            return contextlib.nullcontext(client_session)
-        return self.session()
-
-    def db_session(self) -> AsyncSession:
-        """Get a database session for the engine associated with the API."""
-        return self._db_session()
-
     ###########################################################################
     # Ticker API                                                              #
     ###########################################################################
-    async def get_ticker(
-        self,
-        ticker_id: Union[int, str],
-        *,
-        client_session: Optional[ClientSession] = None,
-    ) -> Ticker:
-        """Get a ticker from the API."""
-        url = self.TURL(f"redcontent?id={ticker_id}&ps=0")
-        async with self._session_context(client_session) as session:
-            async with session.get(url) as resp:
-                ticker = await resp.json()
-                return Ticker(int(ticker_id), dateparser.parse(ticker["lmd"]))
+    @alru_cache(maxsize=4096)
+    async def get_user(self, legacy_id: SupportsInt) -> User:
+        """Get a user and their information."""
+        transport = AIOHTTPTransport(
+            url="https://api-gateway.prod.cloud.ds.at/forum-serve-graphql/v1/"
+        )
+        async with Client(transport=transport, schema=self._schema) as c:
+            query = gql(
+                f"""
+                query LegacyProfilePublic {{
+                    getCommunityMemberPublic(legacyMemberId: {legacy_id}) {{
+                        name
+                        memberCreatedAt
+                    }}
+                }}
+                """
+            )
+            try:
+                response = (await c.execute(query))["getCommunityMemberPublic"]
+                return FullUser(
+                    legacy_id,
+                    response["name"],
+                    dt.datetime.fromisoformat(response["memberCreatedAt"]),
+                )
+            except TransportQueryError as e:
+                data = json.loads(e.args[0].replace("'", '"'))
+                # It looks like we get "Userprofile not found" for non-existing
+                # profiles and a # server error for deleted profiles.
+                if data["message"].startswith("Userprofile not found") or data[
+                    "message"
+                ].startswith("One or more parameter values are not valid."):
+                    return DeletedUser(legacy_id)
 
-    async def get_ticker_threads(
-        self,
-        ticker_id: Union[int, str],
-        *,
-        client_session: Optional[ClientSession] = None,
-    ) -> list[Thread]:
+                raise
+
+    async def get_ticker(self, ticker_id: SupportsInt) -> Ticker:
+        """Get a ticker from the website API."""
+        url = self.TURL(f"redcontent?id={ticker_id}")
+        async with self.session() as s, s.get(url) as resp:
+            ticker = await resp.json()
+            return Ticker(
+                int(ticker_id),
+                dateparser.parse(ticker["lmd"]).astimezone(pytz.utc),
+            )
+
+    async def get_ticker_threads(self, ticker: Ticker) -> list[Thread]:
         """Get a list of thread IDs of a ticker."""
-        url = self.TURL(f"redcontent?id={ticker_id}&ps=1000000")
-
-        async with self._session_context(client_session) as session:
-            async with session.get(url) as resp:
-                return [
-                    Thread(
-                        id=t["id"],
-                        published=dateparser.parse(t["ctd"]).astimezone(pytz.utc),
-                        ticker=int(ticker_id),
-                        title=t.get("hl") or None,
-                        message=t.get("cm") or None,
-                        user=FullUser(
-                            id=t["cid"],
-                            name=t["cn"],
-                            registered=dt.datetime.now(),  # TODO: Use correct time
-                        ),
-                        upvotes=t["vp"],
-                        downvotes=t["vn"],
-                    )
-                    for t in (await resp.json())["rcs"]
-                ]
+        url = self.TURL(f"redcontent?id={ticker.id}&ps={2**16}")
+        async with self.session() as s, s.get(url) as resp:
+            return [
+                Thread(
+                    id=t["id"],
+                    published=dateparser.parse(t["ctd"]).astimezone(pytz.utc),
+                    ticker=ticker,
+                    title=t.get("hl") or None,
+                    message=t.get("cm") or None,
+                    user=await self.get_user(t["cid"]),
+                    upvotes=t["vp"],
+                    downvotes=t["vn"],
+                )
+                for t in (await resp.json())["rcs"]
+            ]
 
     async def _get_thread_postings_page(
         self,
-        ticker_id: Union[int, str],
-        thread_id: Union[int, str],
-        skip_to: Union[None, int, str] = None,
+        thread: Thread,
         *,
-        client_session: Optional[ClientSession] = None,
+        skip_to: None | SupportsInt = None,
     ) -> Any:
         """Get a single page of postings from a ticker thread."""
-        url = self.TURL(f"postings?objectId={ticker_id}&redContentId={thread_id}")
+        url = self.TURL(
+            f"postings?objectId={thread.ticker.id}&redContentId={thread.id}"
+        )
         if skip_to:
             url += f"&skipToPostingId={skip_to}"
 
-        async with self._session_context(client_session) as session:
-            async with session.get(url) as resp:
-                return await resp.json()
+        async with self.session() as s, s.get(url) as resp:
+            return await resp.json()
 
-    async def get_thread_postings(
-        self,
-        ticker_id: Union[int, str],
-        thread_id: Union[int, str],
-        *,
-        client_session: Optional[ClientSession] = None,
-    ) -> list[TickerPosting]:
+    async def get_thread_postings(self, thread: Thread) -> list[TickerPosting]:
         """Get all postings in a ticker thread."""
         postings = []
-        page = await self._get_thread_postings_page(
-            ticker_id,
-            thread_id,
-            client_session=client_session,
-        )
+        page = await self._get_thread_postings_page(thread)
+
         while page["p"]:
             postings.extend(page["p"])
             skip_to = page["p"][-1]["pid"]
-            page = await self._get_thread_postings_page(
-                ticker_id,
-                thread_id,
-                skip_to,
-                client_session=client_session,
-            )
+            page = await self._get_thread_postings_page(thread, skip_to=skip_to)
 
         # Remove duplicates.
         postings = list({p["pid"]: p for p in postings}.values())
         return [
             TickerPosting(
                 id=int(p["pid"]),
-                parent=p["ppid"],
-                user=FullUser(
-                    id=int(p["cid"]),
-                    name=p["cn"],
-                    registered=dt.datetime.now(),  # TODO: Use correct time
-                ),
-                thread=int(thread_id),
+                parent=p["ppid"],  # TODO: Use full posting object
+                user=await self.get_user(p["cid"]),
+                thread=thread,
                 published=dateparser.parse(p["cd"]).astimezone(pytz.utc),
                 title=p.get("hl") or None,
                 message=p.get("tx") or None,

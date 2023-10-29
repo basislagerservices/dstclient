@@ -1,5 +1,7 @@
 aiohttp
 aiosqlite
+async-lru
+gql
 python-dateutil
 pytz
 selenium
