@@ -138,18 +138,33 @@ class Thread:
         self,
         id: SupportsInt,
         published: dt.datetime,
-        ticker: Ticker,
-        user: User,
+        ticker: SupportsInt | Ticker,
+        user: SupportsInt | User,
         upvotes: SupportsInt,
         downvotes: SupportsInt,
         title: Optional[str],
         message: Optional[str],
     ) -> None:
         """Create a new thread object."""
+
+        try:
+            self.ticker_id = int(ticker)  # type: ignore
+        except (TypeError, ValueError):
+            if isinstance(ticker, Ticker):
+                self.ticker = ticker
+            else:
+                raise TypeError("invalid type for ticker")
+
+        try:
+            self.user_id = int(user)  # type: ignore
+        except (TypeError, ValueError):
+            if isinstance(user, User):
+                self.user = user
+            else:
+                raise TypeError("invalid type for user")
+
         self.id = int(id)
         self.published = published
-        self.ticker = ticker
-        self.user = user
         self.upvotes = int(upvotes)
         self.downvotes = int(downvotes)
         self.title = title
@@ -191,9 +206,9 @@ class Thread:
 class Article:
     __tablename__ = "article"
 
-    def __init__(self, id: int, published: dt.datetime) -> None:
+    def __init__(self, id: SupportsInt, published: dt.datetime) -> None:
         """Create a new article."""
-        self.id = id
+        self.id = int(id)
         self.published = published
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -215,8 +230,8 @@ class Posting:
     def __init__(
         self,
         id: SupportsInt,
-        user: User,
-        parent: None | Posting,
+        user: SupportsInt | User,
+        parent: None | Posting | SupportsInt,
         published: dt.datetime,
         upvotes: SupportsInt,
         downvotes: SupportsInt,
@@ -225,9 +240,23 @@ class Posting:
     ) -> None:
         """Do not use this directly."""
 
+        try:
+            self.user_id = int(user)  # type: ignore
+        except (TypeError, ValueError):
+            if isinstance(user, User):
+                self.user = user
+            else:
+                raise TypeError("invalid type for user")
+
+        try:
+            self.parent_id = int(parent)  # type: ignore
+        except (TypeError, ValueError):
+            if parent is None or isinstance(parent, Posting):
+                self.parent = parent
+            else:
+                raise TypeError("invalid type for parent")
+
         self.id = int(id)
-        self.user = user
-        self.parent = parent
         self.published = published
         self.upvotes = int(upvotes)
         self.downvotes = int(downvotes)
@@ -285,19 +314,18 @@ class TickerPosting(Posting):
         downvotes: SupportsInt,
         title: Optional[str],
         message: Optional[str],
-        thread: Thread,
+        thread: SupportsInt | Thread,
     ) -> None:
         super().__init__(
-            id,
-            user,
-            parent,
-            published,
-            upvotes,
-            downvotes,
-            title,
-            message,
+            id, user, parent, published, upvotes, downvotes, title, message
         )
-        self.thread = thread
+        try:
+            self.thread_id = int(thread)  # type: ignore
+        except (TypeError, ValueError):
+            if isinstance(thread, Thread):
+                self.thread = thread
+            else:
+                raise TypeError("invalid type for thread")
 
     thread_id: Mapped[int] = mapped_column(ForeignKey("thread.id"), nullable=True)
     """ID of the thread this posting belongs to."""
@@ -317,18 +345,24 @@ class ArticlePosting(Posting):
         self,
         id: SupportsInt,
         user: User,
-        parent: None | Posting,
+        parent: Optional[Posting],
         published: dt.datetime,
         upvotes: SupportsInt,
         downvotes: SupportsInt,
         title: Optional[str],
         message: Optional[str],
-        article: Article,
+        article: SupportsInt | Article,
     ) -> None:
         super().__init__(
             id, user, parent, published, upvotes, downvotes, title, message
         )
-        self.article = article
+        try:
+            self.article_id = int(article)  # type: ignore
+        except (TypeError, ValueError):
+            if isinstance(article, Article):
+                self.article = article
+            else:
+                raise TypeError("invalid type for article")
 
     article_id: Mapped[int] = mapped_column(ForeignKey("article.id"), nullable=True)
     """ID of the article this posting belongs to."""

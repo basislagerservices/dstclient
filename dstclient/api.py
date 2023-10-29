@@ -115,7 +115,7 @@ class DerStandardAPI:
         async with self.session() as s, s.get(url) as resp:
             ticker = await resp.json()
             return Ticker(
-                int(ticker_id),
+                ticker_id,
                 dateparser.parse(ticker["lmd"]).astimezone(pytz.utc),
             )
 
@@ -128,8 +128,8 @@ class DerStandardAPI:
                     id=t["id"],
                     published=dateparser.parse(t["ctd"]).astimezone(pytz.utc),
                     ticker=ticker,
-                    title=t.get("hl") or None,
-                    message=t.get("cm") or None,
+                    title=t.get("hl"),
+                    message=t.get("cm"),
                     user=await self.get_user(t["cid"]),
                     upvotes=t["vp"],
                     downvotes=t["vn"],
@@ -167,13 +167,13 @@ class DerStandardAPI:
         postings = list({p["pid"]: p for p in postings}.values())
         return [
             TickerPosting(
-                id=int(p["pid"]),
-                parent=p["ppid"],  # TODO: Use full posting object
+                id=p["pid"],
+                parent=p["ppid"],
                 user=await self.get_user(p["cid"]),
                 thread=thread,
                 published=dateparser.parse(p["cd"]).astimezone(pytz.utc),
-                title=p.get("hl") or None,
-                message=p.get("tx") or None,
+                title=p.get("hl"),
+                message=p.get("tx"),
                 upvotes=p["vp"],
                 downvotes=p["vn"],
             )
