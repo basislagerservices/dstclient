@@ -76,8 +76,35 @@ async def test_create_thread(empty_session, threadgen):
         assert result.message == thread.message
 
 
+async def test_create_thread_userid(empty_session, threadgen, fullusergen):
+    """Create a thread with an existing numerical user ID and read it back."""
+    user = fullusergen()
+    thread = threadgen(user=user.id)
+
+    async with empty_session() as session, session.begin():
+        session.add(user)
+        session.add(thread)
+
+    async with empty_session() as session, session.begin():
+        result = await session.get(Thread, thread.id)
+
+        assert result.user_id == user.id
+        assert result.user.id == user.id
+
+
+async def test_create_thread_userid_error(empty_session, threadgen):
+    """Adding a thread with a made up user ID should create an error."""
+    thread = threadgen(user=42)
+
+    with pytest.raises(IntegrityError) as excinfo:
+        async with empty_session() as session, session.begin():
+            session.add(thread)
+
+    assert "FOREIGN KEY" in str(excinfo.value)
+
+
 async def test_update_ticker_threads(empty_session, tickergen, threadgen):
-    """Create multiple threads in the same ticker and them back."""
+    """Create multiple threads in the same ticker and read them back."""
     ticker = tickergen()
     threads = [threadgen(ticker=ticker) for _ in range(8)]
     async with empty_session() as session, session.begin():

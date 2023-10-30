@@ -27,6 +27,7 @@ import datetime as dt
 import json
 import os
 import itertools
+import re
 import time
 from typing import Any, Optional, SupportsInt
 
@@ -44,7 +45,16 @@ import pytz
 
 from selenium.webdriver.common.by import By
 
-from .types import Ticker, TickerPosting, Thread, DeletedUser, FullUser, User
+from .types import (
+    Article,
+    ArticlePosting,
+    DeletedUser,
+    FullUser,
+    Thread,
+    Ticker,
+    TickerPosting,
+    User,
+)
 from .utils import chromedriver
 
 
@@ -179,6 +189,19 @@ class DerStandardAPI:
             )
             for p in postings
         ]
+
+    async def get_article(self, article_id: int) -> Article:
+        """Get an article."""
+        url = f"https://www.derstandard.at/story/{article_id}"
+        async with self.session() as s, s.get(url) as resp:
+            page = await resp.text()
+            m = re.search(r'"contentPublishingDate":"(?P<published>.+?)"', page)
+            published = dt.datetime.fromisoformat(m["published"]).astimezone(pytz.utc)
+            return Article(article_id, published)
+
+    async def get_article_posting(self, article: Article) -> list[ArticlePosting]:
+        """Get postings from an article."""
+        raise NotImplementedError()
 
     ###########################################################################
     # Accept terms and conditions                                             #

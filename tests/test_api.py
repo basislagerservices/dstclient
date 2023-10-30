@@ -91,3 +91,17 @@ async def test_get_user_deleted(api):
     user = await api.get_user(legacy_id=738967)
     assert isinstance(user, DeletedUser)
     assert user.id == 738967
+
+
+@pytest.mark.parametrize(
+    "article_id,published",
+    [
+        (2429463, dt.datetime(2006, 4, 28, 13, 3, tzinfo=pytz.utc)),  # Summer time
+        (2372424, dt.datetime(2006, 3, 17, 15, 43, tzinfo=pytz.utc)),  # Winter time
+    ],
+)
+async def test_get_article(api, article_id, published):
+    """Get an article."""
+    article = await api.get_article(article_id)
+    assert article.id == article_id
+    assert article.published == published
