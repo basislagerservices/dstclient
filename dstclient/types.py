@@ -35,7 +35,7 @@ import datetime as dt
 from typing import Optional, SupportsInt
 
 from sqlalchemy import ForeignKey
-from sqlalchemy.orm import mapped_column, registry, Mapped, relationship
+from sqlalchemy.orm import Mapped, mapped_column, registry, relationship
 
 
 # Type registry for dataclasses.
@@ -113,6 +113,8 @@ class FullUser(User):
 
 @type_registry.mapped
 class Ticker:
+    """Database class for a ticker."""
+
     __tablename__ = "ticker"
 
     def __init__(self, id: SupportsInt, last_modified: dt.datetime) -> None:
@@ -132,6 +134,8 @@ class Ticker:
 
 @type_registry.mapped
 class Thread:
+    """Database class for a thread in a ticker."""
+
     __tablename__ = "thread"
 
     def __init__(
@@ -204,6 +208,8 @@ class Thread:
 
 @type_registry.mapped
 class Article:
+    """Database class for an article."""
+
     __tablename__ = "article"
 
     def __init__(self, id: SupportsInt, published: dt.datetime) -> None:

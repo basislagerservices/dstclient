@@ -105,3 +105,12 @@ async def test_get_article(api, article_id, published):
     article = await api.get_article(article_id)
     assert article.id == article_id
     assert article.published == published
+
+
+async def test_contextmanager_api():
+    """Fetch a ticker with the context manager API."""
+    async with DerStandardAPI() as api:
+        ticker = await api.get_ticker(ticker_id=1336696633613)
+        threads = {t.id: t for t in await api.get_ticker_threads(ticker)}
+        postings = await api.get_thread_postings(threads[26066484])
+        assert len(postings) == 36

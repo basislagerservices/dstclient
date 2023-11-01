@@ -24,22 +24,23 @@ __all__ = ("DerStandardAPI",)
 import asyncio
 import concurrent
 import datetime as dt
+import itertools
 import json
 import os
-import itertools
 import re
 import time
+from types import TracebackType
 from typing import Any, Optional, SupportsInt
 
 from aiohttp import ClientSession, TCPConnector
 
 from async_lru import alru_cache
 
+import dateutil.parser as dateparser
+
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql.transport.exceptions import TransportQueryError
-
-import dateutil.parser as dateparser
 
 import pytz
 
@@ -58,6 +59,12 @@ from .types import (
 from .utils import chromedriver
 
 
+class APIError(Exception):
+    """Raised when the API returns an unexpected response."""
+
+    pass
+
+
 class DerStandardAPI:
     """Unified API for tickers and forums.
 
@@ -72,7 +79,9 @@ class DerStandardAPI:
         with open(os.path.join(os.path.dirname(__file__), "schema.graphql")) as fp:
             self._schema = fp.read()
 
-        self._conn = TCPConnector()
+        # Set the connector to None by default. If it is used outside a context manager, then
+        # a new per-session pool is created. This is usually slower.
+        self._conn: TCPConnector | None = None
 
     def TURL(self, tail: str) -> str:
         """Construct an URL for a ticker API request."""
@@ -87,6 +96,28 @@ class DerStandardAPI:
             connector=self._conn,
             connector_owner=False,
         )
+
+    async def __aenter__(self) -> Any:
+        """Initialize the API by downloading necessary cookies."""
+        await self.update_cookies()
+
+        # Create a connector when we enter the context and close it again when we
+        # leave it. All sessions created in the context share this pool, making
+        # parallel connections faster.
+        self._conn = TCPConnector()
+
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        """Close the existing connection pool."""
+        if self._conn is not None:
+            await self._conn.close()
+            self._conn = None
 
     ###########################################################################
     # Ticker API                                                              #
@@ -203,6 +234,8 @@ class DerStandardAPI:
         async with self.session() as s, s.get(url) as resp:
             page = await resp.text()
             m = re.search(r'"contentPublishingDate":"(?P<published>.+?)"', page)
+            if m is None:
+                raise APIError("publishing date not found")
             published = dt.datetime.fromisoformat(m["published"]).astimezone(pytz.utc)
             return Article(article_id, published)
 

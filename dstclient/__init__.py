@@ -36,11 +36,11 @@ from .api import DerStandardAPI
 from .types import (
     Article,
     ArticlePosting,
+    DeletedUser,
+    FullUser,
     Posting,
     Thread,
     Ticker,
     TickerPosting,
     User,
-    DeletedUser,
-    FullUser,
 )
