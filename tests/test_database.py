@@ -52,7 +52,7 @@ async def test_create_ticker(empty_session, tickergen):
         result = await session.get(Ticker, ticker.id)
 
         assert result.id == ticker.id
-        assert result.last_modified == ticker.last_modified
+        assert result.published == ticker.published
 
 
 async def test_create_thread(empty_session, threadgen):

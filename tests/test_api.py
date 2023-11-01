@@ -58,9 +58,8 @@ async def test_get_ticker(api):
     """Get ticker information."""
     ticker = await api.get_ticker(ticker_id=1336696633613)
     assert ticker.id == 1336696633613
-    assert ticker.last_modified == dt.datetime(
-        2012, 5, 13, 17, 59, 36, 130000
-    ).astimezone(pytz.utc)
+    assert ticker.published == dt.datetime(2012, 5, 11, 16, 51, tzinfo=pytz.utc)
+    assert ticker.title == "RB Salzburg Meister 2012"
 
 
 async def test_get_ticker_threads(api):

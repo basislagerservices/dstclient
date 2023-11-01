@@ -36,6 +36,8 @@ from aiohttp import ClientSession, TCPConnector
 
 from async_lru import alru_cache
 
+from bs4 import BeautifulSoup
+
 import dateutil.parser as dateparser
 
 from gql import Client, gql
@@ -159,13 +161,21 @@ class DerStandardAPI:
 
     async def get_ticker(self, ticker_id: SupportsInt) -> Ticker:
         """Get a ticker from the website API."""
-        url = self.TURL(f"redcontent?id={ticker_id}")
+        url = f"https://www.derstandard.at/jetzt/livebericht/{ticker_id}/"
         async with self.session() as s, s.get(url) as resp:
-            ticker = await resp.json()
-            return Ticker(
-                ticker_id,
-                dateparser.parse(ticker["lmd"]).astimezone(pytz.utc),
-            )
+            # TODO: Fix typing issues with BeautifulSoup.
+            # We get the title from the "regular" soup.
+            soup = BeautifulSoup(await resp.text(), "lxml")
+            title = soup.find("meta", {"name": "title"})["content"]  # type: ignore
+
+            # The publishing date is in another soup inside a script tag.
+            script = soup.find("script", {"id": "summary-slide"}).getText()  # type: ignore
+            scriptsoup = BeautifulSoup(script, "lxml")
+            published = dateparser.parse(
+                scriptsoup.find("meta", {"itemprop": "datePublished"})["content"]  # type: ignore
+            ).astimezone(pytz.utc)
+
+            return Ticker(ticker_id, title, published)  # type: ignore
 
     async def get_ticker_threads(self, ticker: Ticker) -> list[Thread]:
         """Get a list of thread IDs of a ticker."""

@@ -117,16 +117,25 @@ class Ticker:
 
     __tablename__ = "ticker"
 
-    def __init__(self, id: SupportsInt, last_modified: dt.datetime) -> None:
+    def __init__(
+        self,
+        id: SupportsInt,
+        title: str | None,
+        published: dt.datetime,
+    ) -> None:
         """Create a new ticker object."""
         self.id = int(id)
-        self.last_modified = last_modified
+        self.title = title
+        self.published = published
 
     id: Mapped[int] = mapped_column(primary_key=True)
     """ID of this ticker."""
 
-    last_modified: Mapped[dt.datetime]
-    """Datetime this ticker was last modified."""
+    title: Mapped[Optional[str]]
+    """Title of the ticker."""
+
+    published: Mapped[dt.datetime]
+    """Datetime this ticker was published."""
 
     threads: Mapped[list[Thread]] = relationship(back_populates="ticker")
     """Threads in this ticker."""

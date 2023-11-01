@@ -1,7 +1,9 @@
 aiohttp
 aiosqlite
 async-lru
+beautifulsoup4
 gql
+lxml
 python-dateutil
 pytz
 selenium
