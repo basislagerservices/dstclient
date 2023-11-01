@@ -31,7 +31,7 @@ import re
 import time
 from typing import Any, Optional, SupportsInt
 
-from aiohttp import ClientSession
+from aiohttp import ClientSession, TCPConnector
 
 from async_lru import alru_cache
 
@@ -72,6 +72,8 @@ class DerStandardAPI:
         with open(os.path.join(os.path.dirname(__file__), "schema.graphql")) as fp:
             self._schema = fp.read()
 
+        self._conn = TCPConnector()
+
     def TURL(self, tail: str) -> str:
         """Construct an URL for a ticker API request."""
         return "https://www.derstandard.at/jetzt/api/" + tail
@@ -79,7 +81,12 @@ class DerStandardAPI:
     def session(self) -> ClientSession:
         """Create a client session with credentials."""
         headers = {"content-type": "application/json"}
-        return ClientSession(cookies=self._cookies, headers=headers)
+        return ClientSession(
+            cookies=self._cookies,
+            headers=headers,
+            connector=self._conn,
+            connector_owner=False,
+        )
 
     ###########################################################################
     # Ticker API                                                              #
