@@ -163,7 +163,7 @@ async def tickerpostinggen(fullusergen, threadgen):
             thread = thread
             parent = None
         else:
-            assert False, "Invalid combination of parent and thread"
+            raise ValueError("Invalid combination of parent and thread")
 
         id = random.randrange(2**32)
         published = dt.datetime.fromtimestamp(random.randrange(2**32))

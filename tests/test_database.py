@@ -157,13 +157,16 @@ async def test_tickerposting_responses(empty_session, tickerpostinggen):
         assert len(result.responses) == 8
 
 
-@pytest.mark.xfail(reason="not implemented")
 async def test_tickerposting_wrong_thread(empty_session, tickerpostinggen, threadgen):
     """Create a response with the wrong thread."""
     parent = tickerpostinggen()
     child = tickerpostinggen(parent=parent)
-    child.thread = threadgen()
 
-    async with empty_session() as session, session.begin():
-        session.add(parent)
-        session.add(child)
+    with pytest.raises(ValueError) as excinfo:
+        child.thread = threadgen()
+    assert "parent posting is in a different thread" in str(excinfo.value)
+
+    # This should not raise, because it constructs a regular top-level posting,
+    # although in a strange manner.
+    child.parent = None
+    child.thread = threadgen()

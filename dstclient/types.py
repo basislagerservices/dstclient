@@ -32,10 +32,10 @@ __all__ = (
 )
 
 import datetime as dt
-from typing import Optional, SupportsInt
+from typing import Any, Optional, SupportsInt
 
-from sqlalchemy import CheckConstraint, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, registry, relationship
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, registry, relationship, validates
 
 
 # Type registry for dataclasses.
@@ -334,9 +334,6 @@ class Posting:
 class TickerPosting(Posting):
     """Posting in a ticker."""
 
-    # TODO: Add constraint to enforce that the thread of the parent posting
-    #       is the same as for the child posting.
-
     def __init__(
         self,
         id: SupportsInt,
@@ -365,6 +362,17 @@ class TickerPosting(Posting):
     thread: Mapped[Thread] = relationship(lazy="immediate")
     """The thread where this posting was published."""
 
+    @validates("thread", "thread_id")
+    def validate_thread(self, key: str, value: Any) -> Any:
+        """Validate that responses are in the same thread as the parent."""
+        if self.parent is not None:
+            if key == "thread" and value.id != self.parent.thread.id:
+                raise ValueError("parent posting is in a different thread")
+            elif key == "thread_id" and value != self.parent.thread.id:
+                raise ValueError("parent posting is in a different thread")
+
+        return value
+
     __mapper_args__ = {
         "polymorphic_identity": "ticker",
     }
@@ -373,9 +381,6 @@ class TickerPosting(Posting):
 @type_registry.mapped
 class ArticlePosting(Posting):
     """Posting in an article forum."""
-
-    # TODO: Add constraint to enforce that the article of the parent posting
-    #       is the same as for the child posting.
 
     def __init__(
         self,
@@ -404,6 +409,17 @@ class ArticlePosting(Posting):
     """ID of the article this posting belongs to."""
     article: Mapped[Article] = relationship(lazy="immediate")
     """The article where this posting was published."""
+
+    @validates("article", "article_id")
+    def validate_article(self, key: str, value: Any) -> Any:
+        """Validate that responses are in the same article as the parent."""
+        if self.parent is not None:
+            if key == "article" and value.id != self.parent.article.id:
+                raise ValueError("parent posting is in a different article")
+            elif key == "article_id" and value != self.parent.article.id:
+                raise ValueError("parent posting is in a different article")
+
+        return value
 
     __mapper_args__ = {
         "polymorphic_identity": "article",
