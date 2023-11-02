@@ -124,7 +124,7 @@ class DerStandardAPI:
     ###########################################################################
     # Ticker API                                                              #
     ###########################################################################
-    @alru_cache(maxsize=4096)
+    @alru_cache(maxsize=32536)
     async def get_user(self, legacy_id: SupportsInt) -> User:
         """Get a user and their information."""
         transport = AIOHTTPTransport(
@@ -132,21 +132,23 @@ class DerStandardAPI:
         )
         async with Client(transport=transport, schema=self._schema) as c:
             query = gql(
-                f"""
-                query LegacyProfilePublic {{
-                    getCommunityMemberPublic(legacyMemberId: {legacy_id}) {{
+                """
+                query LegacyProfilePublic ($legacyMemberId: ID) {
+                    getCommunityMemberPublic (legacyMemberId: $legacyMemberId) {
                         name
                         memberCreatedAt
-                    }}
-                }}
+                    }
+                }
                 """
             )
             try:
-                response = (await c.execute(query))["getCommunityMemberPublic"]
+                params = {"legacyMemberId": legacy_id}
+                response = await c.execute(query, variable_values=params)
+                userdata = response["getCommunityMemberPublic"]
                 return FullUser(
                     legacy_id,
-                    response["name"],
-                    dt.datetime.fromisoformat(response["memberCreatedAt"]),
+                    userdata["name"],
+                    dt.datetime.fromisoformat(userdata["memberCreatedAt"]),
                 )
             except TransportQueryError as e:
                 data = json.loads(e.args[0].replace("'", '"'))

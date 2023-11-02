@@ -17,6 +17,7 @@
 
 type Query {
     getCommunityMemberPublic(legacyMemberId: ID, memberId: ID): CommunityMemberUserProfile
+    getMemberRelationshipsPublic(memberId: ID!): MemberRelationships
 }
 
 type CommunityMemberUserProfile {
@@ -30,4 +31,27 @@ type CommunityMemberUserProfile {
     status: String
     supporterBadgeEnabled: Boolean
     totalPostingCount: Int
+}
+
+type CommunityMember {
+    memberId: ID
+    bio: String
+    flags: [String]
+    legacyId: ID
+    memberCreatedAt: String
+    name: String
+    personalLink: String
+    status: String
+    supporterBadgeEnabled: Boolean
+}
+
+type Relationship {
+    member: CommunityMember
+    postingCount: Int
+}
+
+type MemberRelationships {
+    follower: [Relationship]
+    followees: [Relationship]
+    ignorees: [Relationship]
 }
