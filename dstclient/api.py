@@ -125,7 +125,12 @@ class DerStandardAPI:
     # Ticker API                                                              #
     ###########################################################################
     @alru_cache(maxsize=32536)
-    async def get_user(self, legacy_id: SupportsInt) -> User:
+    async def get_user(
+        self,
+        legacy_id: SupportsInt,
+        *,
+        relationships: bool = False,
+    ) -> User:
         """Get a user and their information."""
         transport = AIOHTTPTransport(
             url="https://api-gateway.prod.cloud.ds.at/forum-serve-graphql/v1/"
@@ -146,12 +151,18 @@ class DerStandardAPI:
                 params = {"legacyMemberId": legacy_id}
                 response = await c.execute(query, variable_values=params)
                 userdata = response["getCommunityMemberPublic"]
-                return FullUser(
+                fulluser = FullUser(
                     legacy_id,
                     userdata["memberId"],
                     userdata["name"],
                     dt.datetime.fromisoformat(userdata["memberCreatedAt"]),
                 )
+                if relationships:
+                    followees, followers = await self.get_user_relationships(fulluser)
+                    fulluser.followees.update(followees)
+                    fulluser.followers.update(followers)
+                return fulluser
+
             except TransportQueryError as e:
                 data = json.loads(e.args[0].replace("'", '"'))
                 # It looks like we get "Userprofile not found" for non-existing

@@ -34,12 +34,22 @@ __all__ = (
 import datetime as dt
 from typing import Any, Optional, SupportsInt
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, Table, Column, Integer
 from sqlalchemy.orm import Mapped, mapped_column, registry, relationship, validates
 
 
 # Type registry for dataclasses.
 type_registry = registry()
+
+
+# Follower relationship for users.
+# A user in the follower column follows a user in the followee column.
+follower_relationship = Table(
+    "follower_relationship",
+    type_registry.metadata,
+    Column("follower_user_id", Integer, ForeignKey("user.id"), primary_key=True),
+    Column("followee_user_id", Integer, ForeignKey("user.id"), primary_key=True),
+)
 
 
 @type_registry.mapped
@@ -66,6 +76,22 @@ class User:
 
     threads: Mapped[list[Thread]] = relationship(back_populates="user")
     """Threads written by this user."""
+
+    followees: Mapped[set["User"]] = relationship(
+        secondary=follower_relationship,
+        primaryjoin=id == follower_relationship.c.follower_user_id,
+        secondaryjoin=id == follower_relationship.c.followee_user_id,
+        back_populates="followers",
+    )
+    """List of users who are followed by this user."""
+
+    followers: Mapped[set["User"]] = relationship(
+        secondary=follower_relationship,
+        primaryjoin=id == follower_relationship.c.followee_user_id,
+        secondaryjoin=id == follower_relationship.c.follower_user_id,
+        back_populates="followees",
+    )
+    """List of users who are following this user."""
 
     __mapper_args__ = {
         "polymorphic_identity": "user",

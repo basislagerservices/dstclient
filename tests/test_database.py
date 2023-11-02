@@ -170,3 +170,26 @@ async def test_tickerposting_wrong_thread(empty_session, tickerpostinggen, threa
     # although in a strange manner.
     child.parent = None
     child.thread = threadgen()
+
+
+async def test_followers(empty_session, fullusergen):
+    """Create users and let them follow each other."""
+    users = [fullusergen() for _ in range(32)]
+
+    # User with index i follows i + 1 to i + 3
+    for i, user in enumerate(users):
+        user.followees.add(users[(i + 1) % len(users)])
+        user.followees.add(users[(i + 2) % len(users)])
+        user.followees.add(users[(i + 3) % len(users)])
+
+    for user in users:
+        assert len(user.followers) == 3
+
+    async with empty_session() as session, session.begin():
+        session.add_all(users)
+        for user in users:
+            result = await session.get(FullUser, user.id)
+            assert len(result.followers) == 3
+            assert len(result.followees) == 3
+
+            assert user == result
