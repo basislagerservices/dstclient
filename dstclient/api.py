@@ -176,7 +176,7 @@ class DerStandardAPI:
 
     async def get_user_relationships(
         self, user: FullUser
-    ) -> tuple[list[FullUser], list[FullUser]]:
+    ) -> tuple[set[FullUser], set[FullUser]]:
         """Get a tuple of followees and followers of a user."""
         transport = AIOHTTPTransport(
             url="https://api-gateway.prod.cloud.ds.at/forum-serve-graphql/v1/"
@@ -219,8 +219,11 @@ class DerStandardAPI:
                     dt.datetime.fromisoformat(data["member"]["memberCreatedAt"]),
                 )
 
-            followees = [entry(e) for e in followees]
-            follower = [entry(e) for e in follower]
+            followees = {entry(e) for e in followees}
+            followees = set({e.id: e for e in followees}.values())
+
+            follower = {entry(e) for e in follower}
+            follower = set({e.id: e for e in follower}.values())
 
             return followees, follower
 

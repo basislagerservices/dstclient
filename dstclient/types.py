@@ -22,13 +22,14 @@ from __future__ import annotations
 __all__ = (
     "Article",
     "ArticlePosting",
+    "DeletedUser",
+    "FullUser",
     "Posting",
     "Thread",
     "Ticker",
     "TickerPosting",
     "User",
-    "DeletedUser",
-    "FullUser",
+    "type_registry",
 )
 
 import datetime as dt

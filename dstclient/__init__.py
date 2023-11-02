@@ -29,6 +29,7 @@ __all__ = (
     "User",
     "DeletedUser",
     "FullUser",
+    "type_registry",
 )
 
 
@@ -43,4 +44,5 @@ from .types import (
     Ticker,
     TickerPosting,
     User,
+    type_registry,
 )

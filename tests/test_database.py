@@ -193,3 +193,16 @@ async def test_followers(empty_session, fullusergen):
             assert len(result.followees) == 3
 
             assert user == result
+
+
+@pytest.mark.skip(reason="not implemented")
+async def test_followers_remove(empty_session, fullusergen):
+    """Remove a follower after the relationship is in the database"""
+    a = fullusergen()
+    b = fullusergen()
+
+    a.followees.add(b)
+    async with empty_session() as session, session.begin():
+        session.add(a)
+        session.add(b)
+        # TODO: Finish
