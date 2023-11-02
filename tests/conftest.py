@@ -146,28 +146,38 @@ async def tickerpostinggen(fullusergen, threadgen):
     """Create a random ticker posting."""
 
     def factory(
-        ticker: Union[None, int, Ticker] = None,
         thread: Union[None, int, Thread] = None,
         user: Union[None, int, User] = None,
+        parent: Union[None, TickerPosting] = None,
     ) -> TickerPosting:
-        # TODO: Support more tests
-        assert ticker is None
-        assert thread is None
-        assert user is None
+        if user is None:
+            user = fullusergen()
+
+        if thread is None and parent is None:
+            thread = threadgen()
+            parent = None
+        elif thread is None and parent is not None:
+            thread = parent.thread
+            parent = parent
+        elif thread is not None and parent is None:
+            thread = thread
+            parent = None
+        else:
+            assert False, "Invalid combination of parent and thread"
 
         id = random.randrange(2**32)
         published = dt.datetime.fromtimestamp(random.randrange(2**32))
 
         return TickerPosting(
             id=id,
-            user=fullusergen(),  # TODO
-            parent=None,  # TODO
+            user=user,
+            parent=parent,
             published=published,
             upvotes=random.randrange(2**10),
             downvotes=random.randrange(2**10),
             title=random.choice([None, random_str(16)]),
             message=random.choice([None, lorem.sentence()]),
-            thread=threadgen(),
+            thread=thread,
         )
 
     return factory

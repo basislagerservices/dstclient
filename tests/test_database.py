@@ -141,3 +141,29 @@ async def test_create_tickerposting(empty_session, tickerpostinggen):
         assert result is not None
         result = await session.get(Posting, posting.id)
         assert result is not None
+
+
+async def test_tickerposting_responses(empty_session, tickerpostinggen):
+    """Create a tickerposting with responses and read them back."""
+    parent = tickerpostinggen()
+    children = [tickerpostinggen(parent=parent) for _ in range(8)]
+    async with empty_session() as session, session.begin():
+        session.add(parent)
+        session.add_all(children)
+
+    async with empty_session() as session, session.begin():
+        result = await session.get(TickerPosting, parent.id)
+        await session.refresh(result, attribute_names=["responses"])
+        assert len(result.responses) == 8
+
+
+@pytest.mark.xfail(reason="not implemented")
+async def test_tickerposting_wrong_thread(empty_session, tickerpostinggen, threadgen):
+    """Create a response with the wrong thread."""
+    parent = tickerpostinggen()
+    child = tickerpostinggen(parent=parent)
+    child.thread = threadgen()
+
+    async with empty_session() as session, session.begin():
+        session.add(parent)
+        session.add(child)

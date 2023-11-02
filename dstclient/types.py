@@ -34,7 +34,7 @@ __all__ = (
 import datetime as dt
 from typing import Optional, SupportsInt
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import CheckConstraint, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, registry, relationship
 
 
@@ -321,6 +321,9 @@ class Posting:
     message: Mapped[Optional[str]]
     """Content of the posting."""
 
+    responses: Mapped[list[TickerPosting]] = relationship(back_populates="parent")
+    """Responses to this posting."""
+
     __mapper_args__ = {
         "polymorphic_identity": "posting",
         "polymorphic_on": "type",
@@ -330,6 +333,9 @@ class Posting:
 @type_registry.mapped
 class TickerPosting(Posting):
     """Posting in a ticker."""
+
+    # TODO: Add constraint to enforce that the thread of the parent posting
+    #       is the same as for the child posting.
 
     def __init__(
         self,
@@ -367,6 +373,9 @@ class TickerPosting(Posting):
 @type_registry.mapped
 class ArticlePosting(Posting):
     """Posting in an article forum."""
+
+    # TODO: Add constraint to enforce that the article of the parent posting
+    #       is the same as for the child posting.
 
     def __init__(
         self,
