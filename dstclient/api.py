@@ -163,6 +163,56 @@ class DerStandardAPI:
 
                 raise
 
+    async def get_user_relationships(
+        self, user: FullUser
+    ) -> tuple[list[FullUser], list[FullUser]]:
+        """Get a tuple of followees and followers of a user."""
+        transport = AIOHTTPTransport(
+            url="https://api-gateway.prod.cloud.ds.at/forum-serve-graphql/v1/"
+        )
+        async with Client(transport=transport, schema=self._schema) as c:
+            query = gql(
+                """
+                query MemberRelationshipsPublic ($memberId: ID!) {
+                    getMemberRelationshipsPublic (memberId: $memberId) {
+                        follower {
+                            member {
+                                legacyId
+                                memberId
+                                name
+                                memberCreatedAt
+                            }
+                        }
+                        followees {
+                            member {
+                                legacyId
+                                memberId
+                                name
+                                memberCreatedAt
+                            }
+                        }
+                    }
+                }
+                """
+            )
+            params = {"memberId": user.member_id}
+            response = await c.execute(query, variable_values=params)
+            followees = response["getMemberRelationshipsPublic"]["followees"]
+            follower = response["getMemberRelationshipsPublic"]["follower"]
+
+            def entry(data):
+                return FullUser(
+                    data["member"]["legacyId"],
+                    data["member"]["memberId"],
+                    data["member"]["name"],
+                    dt.datetime.fromisoformat(data["member"]["memberCreatedAt"]),
+                )
+
+            followees = [entry(e) for e in followees]
+            follower = [entry(e) for e in follower]
+
+            return followees, follower
+
     async def get_ticker(self, ticker_id: SupportsInt) -> Ticker:
         """Get a ticker from the website API."""
         url = f"https://www.derstandard.at/jetzt/livebericht/{ticker_id}/"

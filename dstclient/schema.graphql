@@ -18,6 +18,8 @@
 type Query {
     getCommunityMemberPublic(legacyMemberId: ID, memberId: ID): CommunityMemberUserProfile
     getMemberRelationshipsPublic(memberId: ID!): MemberRelationships
+    getRatingLogForPosting(postingId: ID): [RatingLogEntry]
+    getForumByContextUri(contextUri: String!): Forum
 }
 
 type CommunityMemberUserProfile {
@@ -54,4 +56,73 @@ type MemberRelationships {
     follower: [Relationship]
     followees: [Relationship]
     ignorees: [Relationship]
+}
+
+type AuthorLegacyData {
+    legacyCommunityIdentity: ID
+}
+
+type Metadata {
+    key: String
+    value: String
+}
+
+type Feature {
+    name: String
+    value: Int
+    statistic: String
+}
+
+type PostingHistory {
+    created: String
+}
+
+type PostingLegacyData {
+    communityName: String
+    communityIdentityId: Int
+    postingId: Int
+}
+
+type Reactions {
+    aggregated: [Feature]
+}
+
+type Author {
+    id: ID
+    name: String
+    lifecycleStatus: String
+    legacyData: AuthorLegacyData
+    flags: [String]
+    status: String
+    followerCount: Int
+    metadata: [Metadata]
+}
+
+type RatingLogEntry {
+    value: String  # "n" or "p"
+    author: Author
+    type: String
+}
+
+type Posting {
+    id: ID
+    lifecycleStatus: String
+    flags: [String]
+    rootPostingId: ID
+    text: String
+    title: String
+    author: Author
+    metadata: [String]
+    reactions: Reactions
+    history: PostingHistory
+    legacy: PostingLegacyData
+    replies: [Posting]
+}
+
+type Forum {
+    id: ID
+    flags: [String]
+    totalPostingCount: Int
+    stickyPostings: [Posting]
+    metadata: [String]
 }
