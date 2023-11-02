@@ -136,6 +136,7 @@ class DerStandardAPI:
                 query LegacyProfilePublic ($legacyMemberId: ID) {
                     getCommunityMemberPublic (legacyMemberId: $legacyMemberId) {
                         name
+                        memberId
                         memberCreatedAt
                     }
                 }
@@ -147,6 +148,7 @@ class DerStandardAPI:
                 userdata = response["getCommunityMemberPublic"]
                 return FullUser(
                     legacy_id,
+                    userdata["memberId"],
                     userdata["name"],
                     dt.datetime.fromisoformat(userdata["memberCreatedAt"]),
                 )

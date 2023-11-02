@@ -56,7 +56,7 @@ class User:
         self.id = int(id)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    """ID of the user."""
+    """Legacy ID of the user."""
 
     type: Mapped[str]
     """Type of the user (deleted, full)."""
@@ -90,12 +90,24 @@ class FullUser(User):
     basic information about them.
     """
 
-    def __init__(self, id: SupportsInt, name: str, registered: dt.datetime) -> None:
+    def __init__(
+        self,
+        id: SupportsInt,
+        member_id: str,
+        name: str,
+        registered: dt.datetime,
+    ) -> None:
         """Create a new full user object."""
         super().__init__(id)
+        self.member_id = member_id
         self.name = name
         self.registered = registered
         self.deleted = None
+
+    # TODO: Can we get this for deleted users?
+    # TODO: Use as key, it will eventually supersede the legacy ID.
+    member_id: Mapped[str] = mapped_column(nullable=True)
+    """ID in the new backend."""
 
     name: Mapped[str] = mapped_column(nullable=True)
     """Name of the user."""

@@ -78,8 +78,9 @@ async def fullusergen():
     def factory() -> FullUser:
         name = random_str(16)
         id = random.randrange(2**32)
+        member_id = random_str(27)
         registered = dt.datetime.fromtimestamp(random.randrange(2**32)).date()
-        user = FullUser(id, name, registered)
+        user = FullUser(id, member_id, name, registered)
         return user
 
     return factory
