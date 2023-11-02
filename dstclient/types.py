@@ -392,6 +392,7 @@ class TickerPosting(Posting):
     def validate_thread(self, key: str, value: Any) -> Any:
         """Validate that responses are in the same thread as the parent."""
         if self.parent is not None:
+            assert isinstance(self.parent, TickerPosting)
             if key == "thread" and value.id != self.parent.thread.id:
                 raise ValueError("parent posting is in a different thread")
             elif key == "thread_id" and value != self.parent.thread.id:
@@ -440,6 +441,7 @@ class ArticlePosting(Posting):
     def validate_article(self, key: str, value: Any) -> Any:
         """Validate that responses are in the same article as the parent."""
         if self.parent is not None:
+            assert isinstance(self.parent, ArticlePosting)
             if key == "article" and value.id != self.parent.article.id:
                 raise ValueError("parent posting is in a different article")
             elif key == "article_id" and value != self.parent.article.id:

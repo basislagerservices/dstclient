@@ -211,7 +211,7 @@ class DerStandardAPI:
             followees = response["getMemberRelationshipsPublic"]["followees"]
             follower = response["getMemberRelationshipsPublic"]["follower"]
 
-            def entry(data):
+            def entry(data: Any) -> FullUser:
                 return FullUser(
                     data["member"]["legacyId"],
                     data["member"]["memberId"],
