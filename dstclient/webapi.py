@@ -1,5 +1,5 @@
 #
-# Copyright 2021-2022 Basislager Services
+# Copyright 2021-2023 Basislager Services
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@ import json
 import os
 import re
 import time
+from collections import namedtuple
 from types import TracebackType
 from typing import Any, Optional, SupportsInt
 
@@ -67,11 +68,16 @@ class APIError(Exception):
     pass
 
 
+Relationships = namedtuple("Relationships", ["followees", "followers"])
+"""Relationships between users."""
+
+
 class DerStandardAPI:
     """Unified API for tickers and forums.
 
     All API functions ensure that the returned objects are complete in the sense
-    that they can immediately be inserted into a database.
+    that they can immediately be inserted into a database, but they don't have a
+    database session associated with them. All objects are transient.
     """
 
     def __init__(self) -> None:
@@ -158,9 +164,10 @@ class DerStandardAPI:
                     dt.datetime.fromisoformat(userdata["memberCreatedAt"]),
                 )
                 if relationships:
-                    followees, followers = await self.get_user_relationships(fulluser)
-                    fulluser.followees.update(followees)
-                    fulluser.followers.update(followers)
+                    r = await self.get_user_relationships(fulluser)
+                    fulluser.followees.update(r.followees)
+                    fulluser.followers.update(r.followers)
+
                 return fulluser
 
             except TransportQueryError as e:
@@ -174,9 +181,7 @@ class DerStandardAPI:
 
                 raise
 
-    async def get_user_relationships(
-        self, user: FullUser
-    ) -> tuple[set[FullUser], set[FullUser]]:
+    async def get_user_relationships(self, user: FullUser) -> Relationships:
         """Get a tuple of followees and followers of a user."""
         transport = AIOHTTPTransport(
             url="https://api-gateway.prod.cloud.ds.at/forum-serve-graphql/v1/"
@@ -222,7 +227,7 @@ class DerStandardAPI:
             followees = {entry(e) for e in followees}
             follower = {entry(e) for e in follower}
 
-            return followees, follower
+            return Relationships(followees, follower)
 
     async def get_ticker(self, ticker_id: SupportsInt) -> Ticker:
         """Get a ticker from the website API."""
@@ -303,6 +308,9 @@ class DerStandardAPI:
             for p in postings
         ]
 
+    ###########################################################################
+    # Forum API                                                               #
+    ###########################################################################
     async def get_article(self, article_id: int) -> Article:
         """Get an article."""
         url = f"https://www.derstandard.at/story/{article_id}"

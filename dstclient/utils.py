@@ -1,5 +1,5 @@
 #
-# Copyright 2021-2022 Basislager Services
+# Copyright 2021-2023 Basislager Services
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,12 +17,16 @@
 
 """Utils for other modules."""
 
+__all__ = ("chromedriver", "async_sqlite_session")
+
 import contextlib
 from typing import Iterator
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service as ChromiumService
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.core.os_manager import ChromeType
@@ -50,3 +54,10 @@ def chromedriver() -> Iterator[webdriver.Chrome]:
         yield driver
     finally:
         driver.quit()
+
+
+def async_sqlite_session(database: str) -> async_sessionmaker[AsyncSession]:
+    """Create an asynchronous sessionmaker for the given database path."""
+    engine = create_async_engine(f"sqlite+aiosqlite:///{database}")
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
+    return async_session

@@ -29,7 +29,7 @@ with open(os.path.join(os.path.dirname(__file__), "requirements.txt")) as fp:
 
 setup(
     name="dstclient",
-    version="0.2",
+    version="0.2.1",
     description="API implementation for derstandard.at",
     author="Basislager Services",
     author_email="services@basislager.space",

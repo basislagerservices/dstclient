@@ -1,5 +1,5 @@
 #
-# Copyright 2021-2022 Basislager Services
+# Copyright 2021-2023 Basislager Services
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -30,10 +30,11 @@ __all__ = (
     "DeletedUser",
     "FullUser",
     "type_registry",
+    "utils",
 )
 
 
-from .api import DerStandardAPI
+from . import utils
 from .types import (
     Article,
     ArticlePosting,
@@ -46,3 +47,4 @@ from .types import (
     User,
     type_registry,
 )
+from .webapi import DerStandardAPI

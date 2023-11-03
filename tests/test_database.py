@@ -273,3 +273,19 @@ async def test_followers_remove(empty_session, fullusergen):
 
     async with empty_session() as session, session.begin():
         session.add(a)
+
+
+async def test_user_delete(empty_session, fullusergen):
+    """Delete a user which already exists as a full user."""
+    full = fullusergen()
+    async with empty_session() as session, session.begin():
+        await session.merge(full)
+
+    deleted = DeletedUser(full.id)
+    async with empty_session() as session, session.begin():
+        with pytest.raises(IntegrityError):
+            await session.merge(deleted)
+            await session.commit()
+        await session.rollback()
+
+    # TODO: Add a way to handle this?
