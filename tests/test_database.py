@@ -207,6 +207,39 @@ async def test_followers_real(empty_session, api, userid):
         await session.merge(user)
 
 
+@pytest.mark.parametrize("userid", [228825, 745596])
+async def test_followers_real_multiple(empty_session, api, userid):
+    """Crawl the same user multiple times, with and without relationships."""
+    # With relationships.
+    user = await api.get_user(userid, relationships=True)
+    async with empty_session() as session, session.begin():
+        await session.merge(user)
+
+    # Without relationships.
+    user = await api.get_user(userid, relationships=False)
+    async with empty_session() as session, session.begin():
+        await session.merge(user)
+
+    # Relationships should not have been removed from the database.
+    async with empty_session() as session, session.begin():
+        result = await session.get(FullUser, userid)
+        await session.refresh(result, attribute_names=["followers", "followees"])
+        assert len(result.followers) != 0
+
+    # Now remove everything.
+    async with empty_session() as session, session.begin():
+        result = await session.get(FullUser, userid)
+        await session.refresh(result, attribute_names=["followers", "followees"])
+        result.followers = set()
+        result.followees = set()
+
+    # Read again and check if they have been cleared.
+    async with empty_session() as session, session.begin():
+        result = await session.get(FullUser, userid)
+        await session.refresh(result, attribute_names=["followers", "followees"])
+        assert len(result.followers) == 0
+
+
 async def test_followers_integrity(empty_session):
     """Follower graph that triggered an integrity error before."""
     # This somehow triggers a problem if the users are different objects.
@@ -217,3 +250,26 @@ async def test_followers_integrity(empty_session):
     a0.followers.add(a1)
     async with empty_session() as session, session.begin():
         await session.merge(a0)
+
+
+async def test_followers_remove(empty_session, fullusergen):
+    """Remove a follower from a user."""
+    a = fullusergen()
+    b = fullusergen()
+    c = fullusergen()
+
+    a.followees.add(b)
+    a.followees.add(c)
+
+    async with empty_session() as session, session.begin():
+        session.add(a)
+
+    assert len(b.followers) == 1
+    assert len(c.followers) == 1
+
+    a.followees = set()
+    assert len(b.followers) == 0
+    assert len(c.followers) == 0
+
+    async with empty_session() as session, session.begin():
+        session.add(a)
