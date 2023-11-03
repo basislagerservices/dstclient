@@ -17,6 +17,7 @@
 
 """Configuration and fixtures for unit tests."""
 
+import asyncio
 import datetime as dt
 import random
 import string
@@ -30,20 +31,30 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from dstclient.types import (
-    type_registry,
-    User,
-    Ticker,
-    Thread,
-    TickerPosting,
-    FullUser,
+from dstclient import (
     DeletedUser,
+    DerStandardAPI,
+    FullUser,
+    Thread,
+    Ticker,
+    TickerPosting,
+    User,
+    type_registry,
 )
 
 
 def random_str(k: int) -> str:
     """Create a random string."""
     return "".join(random.choices(string.ascii_letters, k=k))
+
+
+@pytest.fixture(scope="module")
+def api():
+    """Initialize an API object with cookies."""
+    api = DerStandardAPI()
+    asyncio.run(api.update_cookies())
+
+    return api
 
 
 @event.listens_for(Engine, "connect")

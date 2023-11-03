@@ -18,6 +18,8 @@
 """Tests for the database types."""
 
 
+import datetime as dt
+
 import pytest
 
 from sqlalchemy.exc import IntegrityError
@@ -189,20 +191,29 @@ async def test_followers(empty_session, fullusergen):
         session.add_all(users)
         for user in users:
             result = await session.get(FullUser, user.id)
+            assert user == result
             assert len(result.followers) == 3
             assert len(result.followees) == 3
 
-            assert user == result
 
-
-@pytest.mark.skip(reason="not implemented")
-async def test_followers_remove(empty_session, fullusergen):
-    """Remove a follower after the relationship is in the database"""
-    a = fullusergen()
-    b = fullusergen()
-
-    a.followees.add(b)
+# User IDs are for the following users:
+# - 228825: Winston Smith.
+# - 745596: Heinz-Christian Strache
+@pytest.mark.parametrize("userid", [228825, 745596])
+async def test_followers_real(empty_session, api, userid):
+    """Add a real crawled user with followers to the database."""
+    user = await api.get_user(userid, relationships=True)
     async with empty_session() as session, session.begin():
-        session.add(a)
-        session.add(b)
-        # TODO: Finish
+        await session.merge(user)
+
+
+async def test_followers_integrity(empty_session):
+    """Follower graph that triggered an integrity error before."""
+    # This somehow triggers a problem if the users are different objects.
+    a0 = FullUser(0, "user-a", "User A", dt.datetime(1970, 1, 1))
+    a1 = FullUser(0, "user-a", "User A", dt.datetime(1970, 1, 1))
+    assert a0 is not a1
+
+    a0.followers.add(a1)
+    async with empty_session() as session, session.begin():
+        await session.merge(a0)

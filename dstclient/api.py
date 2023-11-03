@@ -220,10 +220,7 @@ class DerStandardAPI:
                 )
 
             followees = {entry(e) for e in followees}
-            followees = set({e.id: e for e in followees}.values())
-
             follower = {entry(e) for e in follower}
-            follower = set({e.id: e for e in follower}.values())
 
             return followees, follower
 

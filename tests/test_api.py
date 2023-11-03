@@ -18,22 +18,12 @@
 """Tests for the dstclient.api module."""
 
 
-import asyncio
 import datetime as dt
 import pytz
 
 import pytest
 
 from dstclient import DerStandardAPI, DeletedUser, FullUser
-
-
-@pytest.fixture(scope="module")
-def api():
-    """Initialize an API object with cookies."""
-    api = DerStandardAPI()
-    asyncio.run(api.update_cookies())
-
-    return api
 
 
 async def test_cookies():

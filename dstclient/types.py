@@ -35,7 +35,7 @@ __all__ = (
 import datetime as dt
 from typing import Any, Optional, SupportsInt
 
-from sqlalchemy import ForeignKey, Table, Column, Integer
+from sqlalchemy import Column, ForeignKey, Integer, Table
 from sqlalchemy.orm import Mapped, mapped_column, registry, relationship, validates
 
 
