@@ -22,8 +22,6 @@ from __future__ import annotations
 __all__ = (
     "Article",
     "ArticlePosting",
-    "DeletedUser",
-    "FullUser",
     "Posting",
     "Thread",
     "Ticker",
@@ -33,7 +31,7 @@ __all__ = (
 )
 
 import datetime as dt
-from typing import Any, Optional, SupportsInt
+from typing import Any, Optional, SupportsInt, overload
 
 from sqlalchemy import Column, ForeignKey, Integer, Table
 from sqlalchemy.orm import Mapped, mapped_column, registry, relationship, validates
@@ -65,22 +63,59 @@ follower_relationship = Table(
 
 @type_registry.mapped
 class User:
-    """Base class for active and deleted users.
+    """A user in the database.
 
-    This class is also used for partial users who have not been fully crawled.
+    Most fields are optional because we can't get them for deleted users.
     """
 
     __tablename__ = "user"
 
-    def __init__(self, id: SupportsInt) -> None:
-        """Create a new user object."""
+    @overload
+    def __init__(self, id: SupportsInt, *, deleted: dt.datetime) -> None:
+        ...
+
+    @overload
+    def __init__(
+        self,
+        id: SupportsInt,
+        *,
+        member_id: str,
+        name: str,
+        registered: dt.datetime,
+    ) -> None:
+        ...
+
+    def __init__(
+        self,
+        id: SupportsInt,
+        *,
+        member_id: str | None = None,
+        name: str | None = None,
+        registered: dt.datetime | None = None,
+        deleted: dt.datetime | None = None,
+    ) -> None:
+        """Create a new full user object."""
         self.id = int(id)
+        self.member_id = member_id
+        self.name = name
+        self.registered = registered
+        self.deleted = deleted
 
     id: Mapped[int] = mapped_column(primary_key=True)
     """Legacy ID of the user."""
 
-    type: Mapped[str]
-    """Type of the user (deleted, full)."""
+    # TODO: Use as key, it will eventually supersede the legacy ID.
+    member_id: Mapped[Optional[str]]
+    """ID in the new backend."""
+
+    name: Mapped[Optional[str]]
+    """Name of the user."""
+
+    registered: Mapped[Optional[dt.datetime]]
+    """Time when the user was registered."""
+
+    deleted: Mapped[Optional[dt.datetime]]
+    """First time this user was encountered as deleted."""
 
     postings: Mapped[list[TickerPosting]] = relationship(
         back_populates="user", cascade="all,delete"
@@ -107,61 +142,6 @@ class User:
         back_populates="followees",
     )
     """List of users who are following this user."""
-
-    __mapper_args__ = {
-        "polymorphic_identity": "user",
-        "polymorphic_on": "type",
-    }
-
-
-@type_registry.mapped
-class DeletedUser(User):
-    """A user who was already deleted when first added to the database."""
-
-    __mapper_args__ = {
-        "polymorphic_identity": "deleted",
-    }
-
-
-@type_registry.mapped
-class FullUser(User):
-    """A user who was active when initially added to the database.
-
-    The user might have been deleted later, but we still have all the
-    basic information about them.
-    """
-
-    def __init__(
-        self,
-        id: SupportsInt,
-        member_id: str,
-        name: str,
-        registered: dt.datetime,
-    ) -> None:
-        """Create a new full user object."""
-        super().__init__(id)
-        self.member_id = member_id
-        self.name = name
-        self.registered = registered
-        self.deleted = None
-
-    # TODO: Can we get this for deleted users?
-    # TODO: Use as key, it will eventually supersede the legacy ID.
-    member_id: Mapped[str] = mapped_column(nullable=True)
-    """ID in the new backend."""
-
-    name: Mapped[str] = mapped_column(nullable=True)
-    """Name of the user."""
-
-    registered: Mapped[dt.datetime] = mapped_column(nullable=True)
-    """Time when the user was registered."""
-
-    deleted: Mapped[Optional[dt.datetime]]
-    """First time this user was encountered as deleted."""
-
-    __mapper_args__ = {
-        "polymorphic_identity": "full",
-    }
 
 
 @type_registry.mapped

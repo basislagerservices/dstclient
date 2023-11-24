@@ -23,6 +23,8 @@ import datetime as dt
 import pytest
 
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+from sqlalchemy import event
 
 from dstclient.types import *
 
@@ -36,12 +38,13 @@ async def test_create_user(empty_session, fullusergen, delusergen):
         session.add(deluser)
 
     async with empty_session() as session, session.begin():
-        result = await session.get(FullUser, user.id)
+        result = await session.get(User, user.id)
         assert result.id == user.id
         assert result.name == user.name
 
-        result = await session.get(DeletedUser, deluser.id)
+        result = await session.get(User, deluser.id)
         assert result.id == deluser.id
+        assert result.deleted is not None
 
 
 async def test_create_ticker(empty_session, tickergen):
@@ -190,7 +193,7 @@ async def test_followers(empty_session, fullusergen):
     async with empty_session() as session, session.begin():
         session.add_all(users)
         for user in users:
-            result = await session.get(FullUser, user.id)
+            result = await session.get(User, user.id)
             assert user == result
             assert len(result.followers) == 3
             assert len(result.followees) == 3
@@ -222,20 +225,20 @@ async def test_followers_real_multiple(empty_session, api, userid):
 
     # Relationships should not have been removed from the database.
     async with empty_session() as session, session.begin():
-        result = await session.get(FullUser, userid)
+        result = await session.get(User, userid)
         await session.refresh(result, attribute_names=["followers", "followees"])
         assert len(result.followers) != 0
 
     # Now remove everything.
     async with empty_session() as session, session.begin():
-        result = await session.get(FullUser, userid)
+        result = await session.get(User, userid)
         await session.refresh(result, attribute_names=["followers", "followees"])
         result.followers = set()
         result.followees = set()
 
     # Read again and check if they have been cleared.
     async with empty_session() as session, session.begin():
-        result = await session.get(FullUser, userid)
+        result = await session.get(User, userid)
         await session.refresh(result, attribute_names=["followers", "followees"])
         assert len(result.followers) == 0
 
@@ -243,8 +246,8 @@ async def test_followers_real_multiple(empty_session, api, userid):
 async def test_followers_integrity(empty_session):
     """Follower graph that triggered an integrity error before."""
     # This somehow triggers a problem if the users are different objects.
-    a0 = FullUser(0, "user-a", "User A", dt.datetime(1970, 1, 1))
-    a1 = FullUser(0, "user-a", "User A", dt.datetime(1970, 1, 1))
+    a0 = User(0, member_id="user-a", name="User A", registered=dt.datetime(1970, 1, 1))
+    a1 = User(0, member_id="user-a", name="User A", registered=dt.datetime(1970, 1, 1))
     assert a0 is not a1
 
     a0.followers.add(a1)
@@ -275,17 +278,14 @@ async def test_followers_remove(empty_session, fullusergen):
         session.add(a)
 
 
-async def test_user_delete(empty_session, fullusergen):
+async def test_user_delete(empty_session, fullusergen, delusergen):
     """Delete a user which already exists as a full user."""
     full = fullusergen()
     async with empty_session() as session, session.begin():
         await session.merge(full)
 
-    deleted = DeletedUser(full.id)
+    deleted = User(id=full.id, deleted=dt.datetime.now())
     async with empty_session() as session, session.begin():
-        with pytest.raises(IntegrityError):
-            await session.merge(deleted)
-            await session.commit()
-        await session.rollback()
+        await session.merge(deleted)
 
-    # TODO: Add a way to handle this?
+    # TODO: How is a deleted user merged? We should keep the old date.

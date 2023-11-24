@@ -32,9 +32,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from dstclient import (
-    DeletedUser,
     DerStandardAPI,
-    FullUser,
     Thread,
     Ticker,
     TickerPosting,
@@ -86,12 +84,12 @@ async def empty_session(tmp_path):
 async def fullusergen():
     """Create a random full user."""
 
-    def factory() -> FullUser:
+    def factory() -> User:
         name = random_str(16)
         id = random.randrange(2**32)
         member_id = random_str(27)
         registered = dt.datetime.fromtimestamp(random.randrange(2**32)).date()
-        user = FullUser(id, member_id, name, registered)
+        user = User(id, member_id=member_id, name=name, registered=registered)
         return user
 
     return factory
@@ -101,8 +99,9 @@ async def fullusergen():
 async def delusergen():
     """Create a random deleted user."""
 
-    def factory() -> DeletedUser:
-        return DeletedUser(random.randrange(2**32))
+    def factory() -> User:
+        deleted = dt.datetime.fromtimestamp(random.randrange(2**32)).date()
+        return User(random.randrange(2**32), deleted=deleted)
 
     return factory
 

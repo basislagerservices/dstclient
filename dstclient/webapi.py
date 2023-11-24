@@ -52,8 +52,6 @@ from selenium.webdriver.common.by import By
 from .types import (
     Article,
     ArticlePosting,
-    DeletedUser,
-    FullUser,
     Thread,
     Ticker,
     TickerPosting,
@@ -157,11 +155,11 @@ class DerStandardAPI:
                 params = {"legacyMemberId": legacy_id}
                 response = await c.execute(query, variable_values=params)
                 userdata = response["getCommunityMemberPublic"]
-                fulluser = FullUser(
+                fulluser = User(
                     legacy_id,
-                    userdata["memberId"],
-                    userdata["name"],
-                    dt.datetime.fromisoformat(userdata["memberCreatedAt"]),
+                    member_id=userdata["memberId"],
+                    name=userdata["name"],
+                    registered=dt.datetime.fromisoformat(userdata["memberCreatedAt"]),
                 )
                 if relationships:
                     r = await self.get_user_relationships(fulluser)
@@ -177,11 +175,11 @@ class DerStandardAPI:
                 if data["message"].startswith("Userprofile not found") or data[
                     "message"
                 ].startswith("One or more parameter values are not valid."):
-                    return DeletedUser(legacy_id)
+                    return User(legacy_id, deleted=dt.datetime.utcnow())
 
                 raise
 
-    async def get_user_relationships(self, user: FullUser) -> Relationships:
+    async def get_user_relationships(self, user: User) -> Relationships:
         """Get a tuple of followees and followers of a user."""
         transport = AIOHTTPTransport(
             url="https://api-gateway.prod.cloud.ds.at/forum-serve-graphql/v1/"
@@ -216,12 +214,14 @@ class DerStandardAPI:
             followees = response["getMemberRelationshipsPublic"]["followees"]
             follower = response["getMemberRelationshipsPublic"]["follower"]
 
-            def entry(data: Any) -> FullUser:
-                return FullUser(
+            def entry(data: Any) -> User:
+                return User(
                     data["member"]["legacyId"],
-                    data["member"]["memberId"],
-                    data["member"]["name"],
-                    dt.datetime.fromisoformat(data["member"]["memberCreatedAt"]),
+                    member_id=data["member"]["memberId"],
+                    name=data["member"]["name"],
+                    registered=dt.datetime.fromisoformat(
+                        data["member"]["memberCreatedAt"]
+                    ),
                 )
 
             followees = {entry(e) for e in followees}

@@ -27,8 +27,6 @@ __all__ = (
     "Ticker",
     "TickerPosting",
     "User",
-    "DeletedUser",
-    "FullUser",
     "type_registry",
     "utils",
 )
@@ -38,8 +36,6 @@ from . import utils
 from .types import (
     Article,
     ArticlePosting,
-    DeletedUser,
-    FullUser,
     Posting,
     Thread,
     Ticker,

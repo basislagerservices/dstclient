@@ -23,7 +23,7 @@ import pytz
 
 import pytest
 
-from dstclient import DerStandardAPI, DeletedUser, FullUser
+from dstclient import DerStandardAPI, User
 
 
 async def test_cookies():
@@ -70,7 +70,7 @@ async def test_get_thread_postings(api):
 async def test_get_user_full(api):
     """Get a user's information."""
     user = await api.get_user(legacy_id=228825)
-    assert isinstance(user, FullUser)
+    assert isinstance(user, User)
     assert user.id == 228825
     assert user.name == "Winston Smith."
 
@@ -78,8 +78,9 @@ async def test_get_user_full(api):
 async def test_get_user_deleted(api):
     """Get a user's information."""
     user = await api.get_user(legacy_id=738967)
-    assert isinstance(user, DeletedUser)
+    assert isinstance(user, User)
     assert user.id == 738967
+    assert user.deleted is not None
 
 
 @pytest.mark.parametrize(
