@@ -48,8 +48,18 @@ type_registry = registry()
 follower_relationship = Table(
     "follower_relationship",
     type_registry.metadata,
-    Column("follower_user_id", Integer, ForeignKey("user.id"), primary_key=True),
-    Column("followee_user_id", Integer, ForeignKey("user.id"), primary_key=True),
+    Column(
+        "follower_user_id",
+        Integer,
+        ForeignKey("user.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "followee_user_id",
+        Integer,
+        ForeignKey("user.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
 )
 
 
@@ -72,10 +82,14 @@ class User:
     type: Mapped[str]
     """Type of the user (deleted, full)."""
 
-    postings: Mapped[list[TickerPosting]] = relationship(back_populates="user")
+    postings: Mapped[list[TickerPosting]] = relationship(
+        back_populates="user", cascade="all,delete"
+    )
     """Postings written by this user."""
 
-    threads: Mapped[list[Thread]] = relationship(back_populates="user")
+    threads: Mapped[list[Thread]] = relationship(
+        back_populates="user", cascade="all,delete"
+    )
     """Threads written by this user."""
 
     followees: Mapped[set["User"]] = relationship(
@@ -176,7 +190,9 @@ class Ticker:
     published: Mapped[dt.datetime]
     """Datetime this ticker was published."""
 
-    threads: Mapped[list[Thread]] = relationship(back_populates="ticker")
+    threads: Mapped[list[Thread]] = relationship(
+        back_populates="ticker", cascade="all,delete"
+    )
     """Threads in this ticker."""
 
 
@@ -228,12 +244,12 @@ class Thread:
     published: Mapped[dt.datetime]
     """Datetime this thread was published."""
 
-    ticker_id: Mapped[int] = mapped_column(ForeignKey("ticker.id"))
+    ticker_id: Mapped[int] = mapped_column(ForeignKey("ticker.id", ondelete="CASCADE"))
     """ID of the ticker this thread belongs to."""
     ticker: Mapped[Ticker] = relationship(lazy="immediate")
     """The ticker this thread belongs to."""
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"))
     """ID of the user who has published this thread."""
     user: Mapped[User] = relationship(lazy="immediate")
     """The user who posted this."""
@@ -250,7 +266,9 @@ class Thread:
     message: Mapped[Optional[str]]
     """Content of the thread posting."""
 
-    postings: Mapped[list[TickerPosting]] = relationship(back_populates="thread")
+    postings: Mapped[list[TickerPosting]] = relationship(
+        back_populates="thread", cascade="all,delete"
+    )
     """Postings in this thread."""
 
 
@@ -271,7 +289,9 @@ class Article:
     published: Mapped[dt.datetime]
     """Datetime this article was published."""
 
-    postings: Mapped[list[ArticlePosting]] = relationship(back_populates="article")
+    postings: Mapped[list[ArticlePosting]] = relationship(
+        back_populates="article", cascade="all,delete"
+    )
     """Postings in the article forum."""
 
 
@@ -323,12 +343,14 @@ class Posting:
     type: Mapped[str]
     """Type of the posting (ticker, article, ...)"""
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"))
     """ID of the user who has published this posting."""
     user: Mapped[User] = relationship(lazy="immediate")
     """The user who posted this."""
 
-    parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("posting.id"))
+    parent_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("posting.id", ondelete="CASCADE")
+    )
     """Optional ID of a parent posting."""
     parent: Mapped[Optional[Posting]] = relationship(remote_side=[id], lazy="immediate")
     """Optional parent posting."""
@@ -348,7 +370,9 @@ class Posting:
     message: Mapped[Optional[str]]
     """Content of the posting."""
 
-    responses: Mapped[list[TickerPosting]] = relationship(back_populates="parent")
+    responses: Mapped[list[TickerPosting]] = relationship(
+        back_populates="parent", cascade="all,delete"
+    )
     """Responses to this posting."""
 
     __mapper_args__ = {
@@ -384,7 +408,9 @@ class TickerPosting(Posting):
             else:
                 raise TypeError("invalid type for thread")
 
-    thread_id: Mapped[int] = mapped_column(ForeignKey("thread.id"), nullable=True)
+    thread_id: Mapped[int] = mapped_column(
+        ForeignKey("thread.id", ondelete="CASCADE"), nullable=True
+    )
     """ID of the thread this posting belongs to."""
     thread: Mapped[Thread] = relationship(lazy="immediate")
     """The thread where this posting was published."""
@@ -433,7 +459,9 @@ class ArticlePosting(Posting):
             else:
                 raise TypeError("invalid type for article")
 
-    article_id: Mapped[int] = mapped_column(ForeignKey("article.id"), nullable=True)
+    article_id: Mapped[int] = mapped_column(
+        ForeignKey("article.id", ondelete="CASCADE"), nullable=True
+    )
     """ID of the article this posting belongs to."""
     article: Mapped[Article] = relationship(lazy="immediate")
     """The article where this posting was published."""
