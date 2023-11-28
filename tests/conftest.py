@@ -55,14 +55,6 @@ def api():
     return api
 
 
-@event.listens_for(Engine, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
-    """Set the foreign_key pragma to check for nonexisting foreign keys."""
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
-
-
 @pytest.fixture
 async def empty_session(tmp_path):
     """Create an empty database with initialized tables.

@@ -29,10 +29,12 @@ __all__ = (
     "Topic",
     "User",
     "type_registry",
+    "events",
     "utils",
 )
 
 
+from . import events
 from . import utils
 from .types import (
     Article,

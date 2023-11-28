@@ -296,3 +296,15 @@ async def test_add_topic(empty_session):
     topic = Topic("foobar")
     async with empty_session() as session, session.begin():
         session.add(topic)
+
+
+async def test_topic_duplicate(empty_session):
+    """Add two articles with the same topic but different objects."""
+    topic = Topic("foobar")
+    article_a = Article(0, dt.datetime.now(), topics=[Topic("foobar")])
+    async with empty_session() as session, session.begin():
+        session.add(article_a)
+
+    article_b = Article(1, dt.datetime.now(), topics=[Topic("foobar")])
+    async with empty_session() as session, session.begin():
+        session.add(article_b)
