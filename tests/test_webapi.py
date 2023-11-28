@@ -23,12 +23,12 @@ import pytz
 
 import pytest
 
-from dstclient import DerStandardAPI, User
+from dstclient import WebAPI, User
 
 
 async def test_cookies():
     """Test if cookies can be retrieved."""
-    api = DerStandardAPI()
+    api = WebAPI()
     await api.update_cookies()
     assert len(api._cookies) != 0
 
@@ -36,7 +36,7 @@ async def test_cookies():
 @pytest.mark.skip(reason="fails because of caching?")
 async def test_cookies_update():
     """Test if cookies can be retrieved multiple times."""
-    api = DerStandardAPI()
+    api = WebAPI()
     await api.update_cookies()
     first = api._cookies
     await api.update_cookies()
@@ -99,7 +99,7 @@ async def test_get_article(api, article_id, published):
 
 async def test_contextmanager_api():
     """Fetch a ticker with the context manager API."""
-    async with DerStandardAPI() as api:
+    async with WebAPI() as api:
         ticker = await api.get_ticker(ticker_id=1336696633613)
         threads = {t.id: t for t in await api.get_ticker_threads(ticker)}
         postings = await api.get_thread_postings(threads[26066484])

@@ -28,14 +28,20 @@ __all__ = (
     "TickerPosting",
     "User",
     "Topic",
+    "Relationships",
     "type_registry",
 )
 
+from collections import namedtuple
 import datetime as dt
 from typing import Any, Optional, SupportsInt, overload
 
 from sqlalchemy import Column, ForeignKey, Integer, Table
 from sqlalchemy.orm import Mapped, mapped_column, registry, relationship, validates
+
+
+Relationships = namedtuple("Relationships", ["followees", "followers"])
+"""Relationships between users."""
 
 
 # Type registry for dataclasses.

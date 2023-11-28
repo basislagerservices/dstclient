@@ -32,7 +32,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from dstclient import (
-    DerStandardAPI,
+    WebAPI,
     Thread,
     Ticker,
     TickerPosting,
@@ -49,7 +49,7 @@ def random_str(k: int) -> str:
 @pytest.fixture(scope="module")
 def api():
     """Initialize an API object with cookies."""
-    api = DerStandardAPI()
+    api = WebAPI()
     asyncio.run(api.update_cookies())
 
     return api

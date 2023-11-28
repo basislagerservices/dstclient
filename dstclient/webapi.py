@@ -18,7 +18,7 @@
 """Unified API for tickers and forums."""
 
 
-__all__ = ("DerStandardAPI",)
+__all__ = ("WebAPI",)
 
 
 import asyncio
@@ -49,15 +49,7 @@ import pytz
 
 from selenium.webdriver.common.by import By
 
-from .types import (
-    Article,
-    ArticlePosting,
-    Thread,
-    Ticker,
-    TickerPosting,
-    Topic,
-    User,
-)
+from .types import *
 from .utils import chromedriver
 
 
@@ -67,11 +59,7 @@ class APIError(Exception):
     pass
 
 
-Relationships = namedtuple("Relationships", ["followees", "followers"])
-"""Relationships between users."""
-
-
-class DerStandardAPI:
+class WebAPI:
     """Unified API for tickers and forums.
 
     All API functions ensure that the returned objects are complete in the sense
@@ -333,7 +321,7 @@ class DerStandardAPI:
     ###########################################################################
     # Forum API                                                               #
     ###########################################################################
-    async def get_article(self, article_id: int) -> Article:
+    async def get_article(self, article_id: SupportsInt) -> Article:
         """Get an article."""
         url = f"https://www.derstandard.at/story/{article_id}"
         async with self.session() as s, s.get(url) as resp:
@@ -346,7 +334,7 @@ class DerStandardAPI:
 
             return Article(article_id, published, topics=topics)
 
-    async def get_article_posting(self, article: Article) -> list[ArticlePosting]:
+    async def get_article_postings(self, article: Article) -> list[ArticlePosting]:
         """Get postings from an article."""
         raise NotImplementedError()
 

@@ -15,39 +15,17 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-"""API implementation for derstandard.at."""
+"""Unified API for derstandard.at."""
 
-
-__all__ = (
-    "DerStandardAPI",
-    "DatabaseAPI",
-    "WebAPI",
-    "Article",
-    "ArticlePosting",
-    "Posting",
-    "Thread",
-    "Ticker",
-    "TickerPosting",
-    "Topic",
-    "User",
-    "type_registry",
-    "events",
-    "utils",
-)
-
-from . import events
-from . import utils
-from .types import (
-    Article,
-    ArticlePosting,
-    Posting,
-    Thread,
-    Ticker,
-    TickerPosting,
-    Topic,
-    User,
-    type_registry,
-)
-from .api import DerStandardAPI
 from .dbapi import DatabaseAPI
 from .webapi import WebAPI
+
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+
+class DerStandardAPI:
+    """Unified API for DerStandard.at with a database cache."""
+
+    def __init__(self, engine: AsyncEngine) -> None:
+        self.webapi = WebAPI()
+        self.dbapi = DatabaseAPI(engine)
