@@ -27,6 +27,7 @@ __all__ = (
     "Ticker",
     "TickerPosting",
     "User",
+    "Topic",
     "type_registry",
 )
 
@@ -144,6 +145,49 @@ class User:
     """List of users who are following this user."""
 
 
+# Map a ticker to topics.
+ticker_topic = Table(
+    "ticker_topic",
+    type_registry.metadata,
+    Column("ticker_id", Integer, ForeignKey("ticker.id", ondelete="CASCADE")),
+    Column("topic_id", Integer, ForeignKey("topic.id", ondelete="CASCADE")),
+)
+
+# Map an article to topics.
+article_topic = Table(
+    "article_topic",
+    type_registry.metadata,
+    Column("article_id", Integer, ForeignKey("article.id")),
+    Column("topic_id", Integer, ForeignKey("topic.id")),
+)
+
+
+@type_registry.mapped
+class Topic:
+    """Topic assigned to an Article or Ticker."""
+
+    __tablename__ = "topic"
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    """ID of this topic."""
+
+    name: Mapped[str] = mapped_column(unique=True)
+    """Name of this topic."""
+
+    articles: Mapped[set["Article"]] = relationship(
+        secondary=article_topic, back_populates="topics"
+    )
+    """List of articles with this topic."""
+
+    tickers: Mapped[set["Ticker"]] = relationship(
+        secondary=ticker_topic, back_populates="topics"
+    )
+    """List of tickers with this topic."""
+
+
 @type_registry.mapped
 class Ticker:
     """Database class for a ticker."""
@@ -155,11 +199,15 @@ class Ticker:
         id: SupportsInt,
         title: str | None,
         published: dt.datetime,
+        topics: list[Topic] | None = None,
     ) -> None:
         """Create a new ticker object."""
         self.id = int(id)
         self.title = title
         self.published = published
+        if topics is None:
+            topics = []
+        self.topics = topics
 
     id: Mapped[int] = mapped_column(primary_key=True)
     """ID of this ticker."""
@@ -174,6 +222,13 @@ class Ticker:
         back_populates="ticker", cascade="all,delete"
     )
     """Threads in this ticker."""
+
+    topics: Mapped[list["Topic"]] = relationship(
+        secondary=ticker_topic,
+        back_populates="tickers",
+        cascade="all,delete",
+    )
+    """Topics of this ticker."""
 
 
 @type_registry.mapped
@@ -258,10 +313,18 @@ class Article:
 
     __tablename__ = "article"
 
-    def __init__(self, id: SupportsInt, published: dt.datetime) -> None:
+    def __init__(
+        self,
+        id: SupportsInt,
+        published: dt.datetime,
+        topics: list[Topic] | None = None,
+    ) -> None:
         """Create a new article."""
         self.id = int(id)
         self.published = published
+        if topics is None:
+            topics = []
+        self.topics = topics
 
     id: Mapped[int] = mapped_column(primary_key=True)
     """ID of this article."""
@@ -273,6 +336,13 @@ class Article:
         back_populates="article", cascade="all,delete"
     )
     """Postings in the article forum."""
+
+    topics: Mapped[list["Topic"]] = relationship(
+        secondary=article_topic,
+        back_populates="articles",
+        cascade="all,delete",
+    )
+    """Topics of this article."""
 
 
 @type_registry.mapped

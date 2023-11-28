@@ -26,6 +26,7 @@ __all__ = (
     "Thread",
     "Ticker",
     "TickerPosting",
+    "Topic",
     "User",
     "type_registry",
     "utils",
@@ -40,6 +41,7 @@ from .types import (
     Thread,
     Ticker,
     TickerPosting,
+    Topic,
     User,
     type_registry,
 )

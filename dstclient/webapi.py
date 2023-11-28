@@ -31,7 +31,7 @@ import re
 import time
 from collections import namedtuple
 from types import TracebackType
-from typing import Any, Optional, SupportsInt
+from typing import Any, Optional, SupportsInt, cast
 
 from aiohttp import ClientSession, TCPConnector
 
@@ -55,6 +55,7 @@ from .types import (
     Thread,
     Ticker,
     TickerPosting,
+    Topic,
     User,
 )
 from .utils import chromedriver
@@ -124,6 +125,20 @@ class DerStandardAPI:
         if self._conn is not None:
             await self._conn.close()
             self._conn = None
+
+    @staticmethod
+    def _page_config(page: str) -> dict[str, Any]:
+        """Extract the page config from a ticker or article page."""
+        try:
+            match = re.search(
+                r"window\.DERSTANDARD\.pageConfig\.init\((?P<config>\{.*\})\);",
+                page,
+            )
+            if match:
+                return cast(dict[str, Any], json.loads(match["config"]))
+            return dict()
+        except (KeyError, TypeError):
+            return dict()
 
     ###########################################################################
     # Ticker API                                                              #
@@ -233,9 +248,16 @@ class DerStandardAPI:
         """Get a ticker from the website API."""
         url = f"https://www.derstandard.at/jetzt/livebericht/{ticker_id}/"
         async with self.session() as s, s.get(url) as resp:
+            page = await resp.text()
+            # We get tags from the page config object.
+            # TODO: Could we use the contentPublishingDate here as well instead of
+            #       looking it up in the soup? They don't seem to match all the time.
+            config = self._page_config(page)
+            topics = [Topic(t) for t in config["nodes"]]
+
             # TODO: Fix typing issues with BeautifulSoup.
             # We get the title from the "regular" soup.
-            soup = BeautifulSoup(await resp.text(), "lxml")
+            soup = BeautifulSoup(page, "lxml")
             title = soup.find("meta", {"name": "title"})["content"]  # type: ignore
 
             # The publishing date is in another soup inside a script tag.
@@ -245,7 +267,7 @@ class DerStandardAPI:
                 scriptsoup.find("meta", {"itemprop": "datePublished"})["content"]  # type: ignore
             ).astimezone(pytz.utc)
 
-            return Ticker(ticker_id, title, published)  # type: ignore
+            return Ticker(ticker_id, title, published, topics=topics)  # type: ignore
 
     async def get_ticker_threads(self, ticker: Ticker) -> list[Thread]:
         """Get a list of thread IDs of a ticker."""
@@ -316,11 +338,13 @@ class DerStandardAPI:
         url = f"https://www.derstandard.at/story/{article_id}"
         async with self.session() as s, s.get(url) as resp:
             page = await resp.text()
-            m = re.search(r'"contentPublishingDate":"(?P<published>.+?)"', page)
-            if m is None:
-                raise APIError("publishing date not found")
-            published = dt.datetime.fromisoformat(m["published"]).astimezone(pytz.utc)
-            return Article(article_id, published)
+
+            # We get tags and the publishing date from the page config object.
+            config = self._page_config(page)
+            topics = [Topic(t) for t in config["nodes"]]
+            published = dt.datetime.fromisoformat(config["contentPublishingDate"])
+
+            return Article(article_id, published, topics=topics)
 
     async def get_article_posting(self, article: Article) -> list[ArticlePosting]:
         """Get postings from an article."""

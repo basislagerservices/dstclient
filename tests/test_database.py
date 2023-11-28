@@ -289,3 +289,10 @@ async def test_user_delete(empty_session, fullusergen, delusergen):
         await session.merge(deleted)
 
     # TODO: How is a deleted user merged? We should keep the old date.
+
+
+async def test_add_topic(empty_session):
+    """Add a new topic."""
+    topic = Topic("foobar")
+    async with empty_session() as session, session.begin():
+        session.add(topic)
