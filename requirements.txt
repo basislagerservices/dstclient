@@ -1,6 +1,7 @@
 aiohttp
 aiosqlite
 async-lru
+backoff
 beautifulsoup4
 gql
 lxml

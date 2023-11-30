@@ -31,7 +31,6 @@ class DerStandardAPI:
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
         self._dbsession = async_sessionmaker(engine, expire_on_commit=False)
-        self._webapi = WebAPI()
 
     @asynccontextmanager
     async def db(self, readonly: bool = True) -> AsyncGenerator[AsyncSession, None]:
@@ -57,7 +56,7 @@ class DerStandardAPI:
 
         Always request from the web API and store the result in the local database.
         """
-        return self._webapi
+        return WebAPI(self._dbsession)
 
     def _not_allowed(self, name: str, async_: bool = False) -> Any:
         """Create a function that raises and exception."""
