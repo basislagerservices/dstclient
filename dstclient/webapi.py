@@ -32,9 +32,11 @@ import time
 from types import TracebackType
 from typing import Any, Optional, SupportsInt, cast
 
-from aiohttp import ClientSession, TCPConnector
+from aiohttp import ClientError, ClientSession, TCPConnector
 
 from async_lru import alru_cache
+
+import backoff
 
 from bs4 import BeautifulSoup
 
@@ -42,7 +44,7 @@ import dateutil.parser as dateparser
 
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
-from gql.transport.exceptions import TransportQueryError
+from gql.transport.exceptions import TransportError, TransportQueryError
 
 import pytz
 
@@ -61,6 +63,12 @@ class WebAPI:
     There are basically two modes, one with a database sessionmaker and one without it.
     With a sessionmaker, downloaded data is inserted into the database.
     """
+
+    RETRY_EXCEPTIONS = (ClientError, TransportError)
+    """Exceptions that trigger a retry of a request."""
+
+    RETRY_MAX_TIME = 300
+    """Maximum backoff time in seconds."""
 
     def __init__(
         self, db_session: async_sessionmaker[AsyncSession] | None = None
@@ -149,6 +157,7 @@ class WebAPI:
     ###########################################################################
     # Ticker API                                                              #
     ###########################################################################
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
     @alru_cache(maxsize=65536)
     async def get_user(
         self,
@@ -213,6 +222,7 @@ class WebAPI:
 
             return user
 
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
     async def _get_user_relationships(self, user: User) -> Relationships:
         """Get a tuple of followees and followers of a user."""
         transport = AIOHTTPTransport(
@@ -263,6 +273,7 @@ class WebAPI:
 
             return Relationships(followees, follower)
 
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
     async def get_ticker(self, ticker_id: SupportsInt) -> Ticker:
         """Get a ticker from the website API."""
         url = f"https://www.derstandard.at/jetzt/livebericht/{ticker_id}/"
@@ -293,6 +304,7 @@ class WebAPI:
 
             return ticker
 
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
     async def get_ticker_threads(self, ticker: Ticker) -> list[Thread]:
         """Get a list of thread IDs of a ticker."""
         url = self.TURL(f"redcontent?id={ticker.id}&ps={2**16}")
@@ -316,6 +328,7 @@ class WebAPI:
 
             return threads
 
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
     async def _get_thread_postings_page(
         self,
         thread: Thread,
@@ -332,6 +345,7 @@ class WebAPI:
         async with self.session() as s, s.get(url) as resp:
             return await resp.json()
 
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
     async def get_thread_postings(self, thread: Thread) -> list[TickerPosting]:
         """Get all postings in a ticker thread."""
         raw_postings = []
@@ -367,6 +381,7 @@ class WebAPI:
     ###########################################################################
     # Forum API                                                               #
     ###########################################################################
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
     async def get_article(self, article_id: SupportsInt) -> Article:
         """Get an article."""
         url = f"https://www.derstandard.at/story/{article_id}"
@@ -384,6 +399,7 @@ class WebAPI:
                     article = await ds.merge(article)
             return article
 
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
     async def get_article_postings(self, article: Article) -> list[ArticlePosting]:
         """Get postings from an article."""
         raise NotImplementedError()
