@@ -22,12 +22,13 @@ from __future__ import annotations
 __all__ = (
     "Article",
     "ArticlePosting",
+    "Metadata",
     "Posting",
     "Thread",
     "Ticker",
     "TickerPosting",
-    "User",
     "Topic",
+    "User",
     "Relationships",
     "type_registry",
 )
@@ -539,3 +540,20 @@ class ArticlePosting(Posting):
     __mapper_args__ = {
         "polymorphic_identity": "article",
     }
+
+
+@type_registry.mapped
+class Metadata:
+    """Dictionary for general-purpose metadata."""
+
+    __tablename__ = "metadata"
+
+    def __init__(self, key: str, value: str) -> None:
+        self.key = key
+        self.value = value
+
+    key: Mapped[str] = mapped_column(primary_key=True)
+    """Key of the metadata entry."""
+
+    value: Mapped[str]
+    """Value of the metadata entry."""
