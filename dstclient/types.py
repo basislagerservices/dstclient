@@ -233,6 +233,7 @@ class Ticker:
         secondary=ticker_topic,
         back_populates="tickers",
         cascade="all,delete",
+        lazy="immediate",
     )
     """Topics of this ticker."""
 
@@ -347,6 +348,7 @@ class Article:
         secondary=article_topic,
         back_populates="articles",
         cascade="all,delete",
+        lazy="immediate",
     )
     """Topics of this article."""
 

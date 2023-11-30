@@ -52,8 +52,7 @@ class DerStandardAPI:
             if readonly:
                 await s.rollback()
 
-    @property
-    def web(self) -> Any:
+    def web(self) -> WebAPI:
         """Access to the web API.
 
         Always request from the web API and store the result in the local database.
