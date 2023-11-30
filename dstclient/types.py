@@ -32,8 +32,8 @@ __all__ = (
     "type_registry",
 )
 
-from collections import namedtuple
 import datetime as dt
+from collections import namedtuple
 from typing import Any, Optional, SupportsInt, overload
 
 from sqlalchemy import Column, ForeignKey, Integer, Table

@@ -53,7 +53,16 @@ from selenium.webdriver.common.by import By
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from .types import *
+from .types import (
+    Article,
+    ArticlePosting,
+    Relationships,
+    Thread,
+    Ticker,
+    TickerPosting,
+    Topic,
+    User,
+)
 from .utils import chromedriver
 
 

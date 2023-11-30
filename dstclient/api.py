@@ -20,9 +20,9 @@
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
 
-from .webapi import WebAPI
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, AsyncSession
+from .webapi import WebAPI
 
 
 class DerStandardAPI:

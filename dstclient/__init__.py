@@ -36,6 +36,7 @@ __all__ = (
 
 from . import events
 from . import utils
+from .api import DerStandardAPI
 from .types import (
     Article,
     ArticlePosting,
@@ -47,5 +48,4 @@ from .types import (
     User,
     type_registry,
 )
-from .api import DerStandardAPI
 from .webapi import WebAPI

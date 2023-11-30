@@ -20,9 +20,6 @@
 from typing import Any
 
 from sqlalchemy import Engine, event
-from sqlalchemy.orm import Session
-
-from .types import Article, Ticker, Topic
 
 
 @event.listens_for(Engine, "connect")
