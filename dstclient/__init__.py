@@ -21,6 +21,7 @@
 __all__ = (
     "DerStandardAPI",
     "WebAPI",
+    "Ressort",
     "Article",
     "ArticlePosting",
     "Posting",
@@ -48,4 +49,4 @@ from .types import (
     User,
     type_registry,
 )
-from .webapi import WebAPI
+from .webapi import Ressort, WebAPI

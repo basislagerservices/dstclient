@@ -18,12 +18,13 @@
 """Unified API for tickers and forums."""
 
 
-__all__ = ("WebAPI",)
+__all__ = ("WebAPI", "Ressort")
 
 
 import asyncio
 import concurrent
 import datetime as dt
+import enum
 import itertools
 import json
 import os
@@ -64,6 +65,31 @@ from .types import (
     User,
 )
 from .utils import chromedriver
+
+
+class Ressort(enum.StrEnum):
+    """Ressort available for queries."""
+
+    FRONTPAGE = "frontpage"
+    INTERNATIONAL = "international"
+    INLAND = "inland"
+    WIRTSCHAFT = "wirtschaft"
+    WEB = "web"
+    SPORT = "sport"
+    PANORAMA = "panorama"
+    KULTUR = "kultur"
+    ETAT = "etat"
+    WISSENSCHAFT = "wissenschaft"
+    LIFESTYLE = "lifestyle"
+    DISKURS = "diskurs"
+    KARRIERE = "karriere"
+    IMMOBILIEN = "immobilien"
+    ZUKUNFT = "zukunft"
+    GESUNDHEIT = "gesundheit"
+    RECHT = "recht"
+    DIESTANDARD = "diestandard"
+    PODCAST = "podcast"
+    VIDEO = "video"
 
 
 class WebAPI:
@@ -412,6 +438,57 @@ class WebAPI:
     async def get_article_postings(self, article: Article) -> list[ArticlePosting]:
         """Get postings from an article."""
         raise NotImplementedError()
+
+    ###########################################################################
+    # General website API                                                     #
+    ###########################################################################
+    @staticmethod
+    def _timeline_url(date: dt.date, ressort: str) -> str:
+        return f"https://www.derstandard.at/{ressort.lower()}/{date.year}/{date.month}/{date.day}"
+
+    async def get_ressort_entries(
+        self,
+        ressort: str,
+        start_date: dt.date,
+        end_date: dt.date | None = None,
+    ) -> tuple[set[int], set[int]]:
+        """Get the IDs of articles and tickers in a ressort between two given dates.
+
+        Dates are only a guideline and returned entries might be outside the given
+        date range.
+
+        Returns a tuple (article_ids, ticker_ids).
+        """
+        if end_date is None:
+            end_date = dt.date.today()
+
+        articles = set()
+        tickers = set()
+        date = end_date
+        while date >= start_date:
+            a, t = await self._get_ressort_entries(ressort, date)
+            articles.update(a)
+            tickers.update(t)
+            date -= dt.timedelta(days=1)
+
+        return articles, tickers
+
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
+    async def _get_ressort_entries(
+        self,
+        ressort: str,
+        date: dt.date,
+    ) -> tuple[set[int], set[int]]:
+        """Get ressort entries for the given date.
+
+        Returns a tuple (article_ids, ticker_ids).
+        """
+        url = self._timeline_url(date, ressort)
+        async with self.session() as s, s.get(url) as resp:
+            text = await resp.text()
+            articles = set(re.findall(r"/story/(?P<ticker_id>[0-9]+)", text))
+            tickers = set(re.findall(r"/jetzt/livebericht/(?P<ticker_id>[0-9]+)", text))
+            return (articles, tickers)
 
     ###########################################################################
     # Accept terms and conditions                                             #
