@@ -199,10 +199,8 @@ class WebAPI:
                     deleted = dt.datetime.utcnow()
                     if self._db_session:
                         async with self._db_session() as ds, ds.begin():
-                            query = select(User.deleted).where(
-                                User.id == int(legacy_id)
-                            )
-                            if old_deleted := (await ds.execute(query)).scalar():
+                            stmt = select(User.deleted).where(User.id == int(legacy_id))
+                            if old_deleted := (await ds.execute(stmt)).scalar():
                                 deleted = old_deleted
 
                     user = User(legacy_id, deleted=deleted)

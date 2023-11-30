@@ -17,7 +17,7 @@
 
 """Unified API for derstandard.at."""
 
-from contextlib import asynccontextmanager, AsyncExitStack
+from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
 
 from .webapi import WebAPI
@@ -37,11 +37,20 @@ class DerStandardAPI:
     async def db(self, readonly: bool = True) -> AsyncGenerator[AsyncSession, None]:
         """Access to the database session.
 
-        The session is created and begin() is called.
+        The session is created and begin() is called. If read-only is set to true, then
+        some functions of the session are not available and the session is rolled back
+        at the end, making all changes non-persistent.
+        Note that there is probably a way around it, but it should be safe enough for
+        the most common scenarios.
         """
-        # TODO: Make this session read-only be default.
         async with self._dbsession() as s, s.begin():
+            if readonly:
+                s.commit = self._not_allowed("commit", async_=True)  # type: ignore
+
             yield s
+
+            if readonly:
+                await s.rollback()
 
     @property
     def web(self) -> Any:
@@ -50,3 +59,17 @@ class DerStandardAPI:
         Always request from the web API and store the result in the local database.
         """
         return self._webapi
+
+    def _not_allowed(self, name: str, async_: bool = False) -> Any:
+        """Create a function that raises and exception."""
+
+        def func(*args: Any, **kwargs: Any) -> Any:
+            raise Exception(f"function '{name}' not allowed for read-only sessions")
+
+        async def afunc(*args: Any, **kwargs: Any) -> Any:
+            raise Exception(f"function '{name}' not allowed for read-only sessions")
+
+        if async_:
+            return afunc
+        else:
+            return func

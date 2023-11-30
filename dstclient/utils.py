@@ -17,7 +17,7 @@
 
 """Utils for other modules."""
 
-__all__ = ("chromedriver", "async_sqlite_session")
+__all__ = ("chromedriver", "sqlite_engine")
 
 import contextlib
 from typing import Iterator
@@ -26,10 +26,12 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service as ChromiumService
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.core.os_manager import ChromeType
+
+from .types import type_registry
 
 
 @contextlib.contextmanager
@@ -56,8 +58,9 @@ def chromedriver() -> Iterator[webdriver.Chrome]:
         driver.quit()
 
 
-def async_sqlite_session(database: str) -> async_sessionmaker[AsyncSession]:
-    """Create an asynchronous sessionmaker for the given database path."""
+async def sqlite_engine(database: str) -> AsyncEngine:
+    """Create an asynchronous engine for the given database path."""
     engine = create_async_engine(f"sqlite+aiosqlite:///{database}")
-    async_session = async_sessionmaker(engine, expire_on_commit=False)
-    return async_session
+    async with engine.begin() as conn:
+        await conn.run_sync(type_registry.metadata.create_all)
+    return engine

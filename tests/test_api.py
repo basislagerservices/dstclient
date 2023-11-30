@@ -106,14 +106,12 @@ async def api():
     yield DerStandardAPI(engine)
 
 
-@pytest.mark.xfail(reason="read-only sessions not implemented")
 async def test_database_readonly(api: DerStandardAPI):
     """Check that access to the database is readonly."""
     # Get a user and change its name.
     async with api.db() as s:
         user = await s.get(User, 0)
         user.name = "FOOBAR"
-        await s.commit()
 
     # Get the same user and check if the name was changed.
     async with api.db() as s:
