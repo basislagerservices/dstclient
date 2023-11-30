@@ -33,34 +33,3 @@ def pragma_foreign_keys(connection: Any, connection_record: Any) -> None:
         cursor = connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
-
-
-def _sanitize_topics(session: Session, obj: Ticker | Article) -> None:
-    """Check for duplicate topics."""
-    for i in range(len(obj.topics)):
-        topic = obj.topics[i]
-        # TODO: This seems like a slow query.
-        existing_topic = session.query(Topic).filter_by(name=topic.name).first()
-        if existing_topic:
-            obj.topics[i] = existing_topic
-            session.expunge(topic)
-
-
-def _sanitize_topic_duplicates(session: Session, topic: Topic) -> None:
-    """Expunge existing topics instead of flushing them again."""
-    existing_topic = session.query(Topic).filter_by(name=topic.name).first()
-    if existing_topic:
-        session.expunge(topic)
-
-
-@event.listens_for(Session, "before_flush")
-def session_before_flush(session: Session, flush_context: Any, instances: Any) -> None:
-    """Sanitize objects before they are flushed to the database."""
-    for instance in session.new:
-        match instance:
-            case Article():
-                _sanitize_topics(session, instance)
-            case Ticker():
-                _sanitize_topics(session, instance)
-            case Topic():
-                _sanitize_topic_duplicates(session, instance)

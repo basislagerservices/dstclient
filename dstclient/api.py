@@ -17,15 +17,36 @@
 
 """Unified API for derstandard.at."""
 
-from .dbapi import DatabaseAPI
+from contextlib import asynccontextmanager, AsyncExitStack
+from typing import Any, AsyncGenerator
+
 from .webapi import WebAPI
 
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, AsyncSession
 
 
 class DerStandardAPI:
-    """Unified API for DerStandard.at with a database cache."""
+    """Unified API for derstandard.at with a database cache."""
 
     def __init__(self, engine: AsyncEngine) -> None:
-        self.webapi = WebAPI()
-        self.dbapi = DatabaseAPI(engine)
+        self._engine = engine
+        self._dbsession = async_sessionmaker(engine, expire_on_commit=False)
+        self._webapi = WebAPI()
+
+    @asynccontextmanager
+    async def db(self, readonly: bool = True) -> AsyncGenerator[AsyncSession, None]:
+        """Access to the database session.
+
+        The session is created and begin() is called.
+        """
+        # TODO: Make this session read-only be default.
+        async with self._dbsession() as s, s.begin():
+            yield s
+
+    @property
+    def web(self) -> Any:
+        """Access to the web API.
+
+        Always request from the web API and store the result in the local database.
+        """
+        return self._webapi

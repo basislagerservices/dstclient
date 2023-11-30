@@ -29,7 +29,6 @@ import json
 import os
 import re
 import time
-from collections import namedtuple
 from types import TracebackType
 from typing import Any, Optional, SupportsInt, cast
 
@@ -49,25 +48,23 @@ import pytz
 
 from selenium.webdriver.common.by import By
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from .types import *
 from .utils import chromedriver
-
-
-class APIError(Exception):
-    """Raised when the API returns an unexpected response."""
-
-    pass
 
 
 class WebAPI:
     """Unified API for tickers and forums.
 
-    All API functions ensure that the returned objects are complete in the sense
-    that they can immediately be inserted into a database, but they don't have a
-    database session associated with them. All objects are transient.
+    There are basically two modes, one with a database sessionmaker and one without it.
+    With a sessionmaker, downloaded data is inserted into the database.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self, db_session: async_sessionmaker[AsyncSession] | None = None
+    ) -> None:
         self._cookies: Optional[dict[str, str]] = None
 
         # GraphQL transport and schema
@@ -77,6 +74,9 @@ class WebAPI:
         # Set the connector to None by default. If it is used outside a context manager, then
         # a new per-session pool is created. This is usually slower.
         self._conn: TCPConnector | None = None
+
+        # Factory for database sessions.
+        self._db_session = db_session
 
     def TURL(self, tail: str) -> str:
         """Construct an URL for a ticker API request."""
@@ -128,10 +128,28 @@ class WebAPI:
         except (KeyError, TypeError):
             return dict()
 
+    async def _get_topics(self, topics: list[str]) -> list[Topic]:
+        """Create topic objects from a list of strings."""
+        entries = []
+        if self._db_session:
+            async with self._db_session() as s, s.begin():
+                for name in topics:
+                    query = select(Topic).where(Topic.name == name)
+                    if existing := (await s.execute(query)).scalar():
+                        entries.append(existing)
+                    else:
+                        topic = Topic(name)
+                        s.add(topic)
+                        entries.append(topic)
+        else:
+            entries = [Topic(t) for t in topics]
+
+        return entries
+
     ###########################################################################
     # Ticker API                                                              #
     ###########################################################################
-    @alru_cache(maxsize=32536)
+    @alru_cache(maxsize=65536)
     async def get_user(
         self,
         legacy_id: SupportsInt,
@@ -158,31 +176,46 @@ class WebAPI:
                 params = {"legacyMemberId": legacy_id}
                 response = await c.execute(query, variable_values=params)
                 userdata = response["getCommunityMemberPublic"]
-                fulluser = User(
+                user = User(
                     legacy_id,
                     member_id=userdata["memberId"],
                     name=userdata["name"],
                     registered=dt.datetime.fromisoformat(userdata["memberCreatedAt"]),
                 )
                 if relationships:
-                    r = await self.get_user_relationships(fulluser)
-                    fulluser.followees.update(r.followees)
-                    fulluser.followers.update(r.followers)
-
-                return fulluser
+                    r = await self._get_user_relationships(user)
+                    user.followees.update(r.followees)
+                    user.followers.update(r.followers)
 
             except TransportQueryError as e:
                 data = json.loads(e.args[0].replace("'", '"'))
                 # It looks like we get "Userprofile not found" for non-existing
                 # profiles and a # server error for deleted profiles.
-                if data["message"].startswith("Userprofile not found") or data[
-                    "message"
-                ].startswith("One or more parameter values are not valid."):
-                    return User(legacy_id, deleted=dt.datetime.utcnow())
+                msg = data["message"]
+                if msg.startswith("Userprofile not found") or msg.startswith(
+                    "One or more parameter values are not valid."
+                ):
+                    # Check if the user was already deleted.
+                    deleted = dt.datetime.utcnow()
+                    if self._db_session:
+                        async with self._db_session() as ds, ds.begin():
+                            query = select(User.deleted).where(
+                                User.id == int(legacy_id)
+                            )
+                            if old_deleted := (await ds.execute(query)).scalar():
+                                deleted = old_deleted
 
-                raise
+                    user = User(legacy_id, deleted=deleted)
+                else:
+                    raise
 
-    async def get_user_relationships(self, user: User) -> Relationships:
+            if self._db_session:
+                async with self._db_session() as ds, ds.begin():
+                    user = await ds.merge(user)
+
+            return user
+
+    async def _get_user_relationships(self, user: User) -> Relationships:
         """Get a tuple of followees and followers of a user."""
         transport = AIOHTTPTransport(
             url="https://api-gateway.prod.cloud.ds.at/forum-serve-graphql/v1/"
@@ -241,7 +274,7 @@ class WebAPI:
             # TODO: Could we use the contentPublishingDate here as well instead of
             #       looking it up in the soup? They don't seem to match all the time.
             config = self._page_config(page)
-            topics = [Topic(t) for t in config["nodes"]]
+            topics = await self._get_topics(config["nodes"])
 
             # TODO: Fix typing issues with BeautifulSoup.
             # We get the title from the "regular" soup.
@@ -255,14 +288,20 @@ class WebAPI:
                 scriptsoup.find("meta", {"itemprop": "datePublished"})["content"]  # type: ignore
             ).astimezone(pytz.utc)
 
-            return Ticker(ticker_id, title, published, topics=topics)  # type: ignore
+            ticker = Ticker(ticker_id, title, published, topics=topics)  # type: ignore
+            if self._db_session:
+                async with self._db_session() as ds, ds.begin():
+                    ticker = await ds.merge(ticker)
+
+            return ticker
 
     async def get_ticker_threads(self, ticker: Ticker) -> list[Thread]:
         """Get a list of thread IDs of a ticker."""
         url = self.TURL(f"redcontent?id={ticker.id}&ps={2**16}")
         async with self.session() as s, s.get(url) as resp:
-            return [
-                Thread(
+            threads = []
+            for t in (await resp.json())["rcs"]:
+                thread = Thread(
                     id=t["id"],
                     published=dateparser.parse(t["ctd"]).astimezone(pytz.utc),
                     ticker=ticker,
@@ -272,8 +311,12 @@ class WebAPI:
                     upvotes=t["vp"],
                     downvotes=t["vn"],
                 )
-                for t in (await resp.json())["rcs"]
-            ]
+                if self._db_session:
+                    async with self._db_session() as ds, ds.begin():
+                        thread = await ds.merge(thread)
+                threads.append(thread)
+
+            return threads
 
     async def _get_thread_postings_page(
         self,
@@ -293,18 +336,19 @@ class WebAPI:
 
     async def get_thread_postings(self, thread: Thread) -> list[TickerPosting]:
         """Get all postings in a ticker thread."""
-        postings = []
+        raw_postings = []
         page = await self._get_thread_postings_page(thread)
 
         while page["p"]:
-            postings.extend(page["p"])
+            raw_postings.extend(page["p"])
             skip_to = page["p"][-1]["pid"]
             page = await self._get_thread_postings_page(thread, skip_to=skip_to)
 
         # Remove duplicates.
-        postings = list({p["pid"]: p for p in postings}.values())
-        return [
-            TickerPosting(
+        raw_postings = list({p["pid"]: p for p in raw_postings}.values())
+        postings = []
+        for p in raw_postings:
+            posting = TickerPosting(
                 id=p["pid"],
                 parent=p["ppid"],
                 user=await self.get_user(p["cid"]),
@@ -315,8 +359,12 @@ class WebAPI:
                 upvotes=p["vp"],
                 downvotes=p["vn"],
             )
-            for p in postings
-        ]
+            if self._db_session:
+                async with self._db_session() as ds, ds.begin():
+                    posting = await ds.merge(posting)
+            postings.append(posting)
+
+        return postings
 
     ###########################################################################
     # Forum API                                                               #
@@ -329,10 +377,14 @@ class WebAPI:
 
             # We get tags and the publishing date from the page config object.
             config = self._page_config(page)
-            topics = [Topic(t) for t in config["nodes"]]
+            topics = await self._get_topics(config["nodes"])
             published = dt.datetime.fromisoformat(config["contentPublishingDate"])
 
-            return Article(article_id, published, topics=topics)
+            article = Article(article_id, published, topics=topics)
+            if self._db_session:
+                async with self._db_session() as ds, ds.begin():
+                    article = await ds.merge(article)
+            return article
 
     async def get_article_postings(self, article: Article) -> list[ArticlePosting]:
         """Get postings from an article."""

@@ -18,12 +18,41 @@
 """Tests for the dstclient.api module."""
 
 
+import asyncio
 import datetime as dt
 import pytz
 
 import pytest
 
-from dstclient import WebAPI, User
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+
+from dstclient import *
+
+
+@pytest.fixture(scope="session")
+def cookies():
+    """Initialize an API object with cookies."""
+    api = WebAPI()
+    asyncio.run(api.update_cookies())
+    return api._cookies
+
+
+@pytest.fixture(params=[(None,), ("sqlite+aiosqlite://",)])
+async def webapi(request, cookies):
+    """Create a WebAPI object with or without a database attached to it."""
+    (url,) = request.param
+    if url:
+        engine = create_async_engine(url)
+        session = async_sessionmaker(engine, expire_on_commit=False)
+        async with engine.begin() as conn:
+            await conn.run_sync(type_registry.metadata.create_all)
+        api = WebAPI(session)
+    else:
+        api = WebAPI()
+
+    api._cookies = cookies
+    yield api
 
 
 async def test_cookies():
@@ -33,54 +62,92 @@ async def test_cookies():
     assert len(api._cookies) != 0
 
 
-@pytest.mark.skip(reason="fails because of caching?")
-async def test_cookies_update():
-    """Test if cookies can be retrieved multiple times."""
-    api = WebAPI()
-    await api.update_cookies()
-    first = api._cookies
-    await api.update_cookies()
-    second = api._cookies
-    assert first != second
-
-
-async def test_get_ticker(api):
-    """Get ticker information."""
-    ticker = await api.get_ticker(ticker_id=1336696633613)
+async def test_get_ticker(webapi: WebAPI):
+    """Download basic information about a ticker."""
+    ticker = await webapi.get_ticker(ticker_id=1336696633613)
     assert ticker.id == 1336696633613
     assert ticker.published == dt.datetime(2012, 5, 11, 16, 51, tzinfo=pytz.utc)
     assert ticker.title == "RB Salzburg Meister 2012"
 
+    if webapi._db_session:
+        async with webapi._db_session() as s, s.begin():
+            result = await s.get(Ticker, 1336696633613)
+            assert result.title == "RB Salzburg Meister 2012"
 
-async def test_get_ticker_threads(api):
+
+async def test_get_ticker_topic_overlap(webapi: WebAPI):
+    """Download two tickers with overlapping topics."""
+    ta = await webapi.get_ticker(ticker_id=2000134222213)
+    tb = await webapi.get_ticker(ticker_id=2000115415698)
+
+    topics_a = set(t.name for t in ta.topics)
+    topics_b = set(t.name for t in tb.topics)
+    assert set.intersection(topics_a, topics_b)
+
+    if webapi._db_session:
+        async with webapi._db_session() as s, s.begin():
+            results = (await s.execute(select(Topic))).scalars().all()
+            assert len(results) == len(set.union(topics_a, topics_b))
+
+
+async def test_get_ticker_threads(webapi):
     """Get all threads from an old live ticker."""
-    ticker = await api.get_ticker(ticker_id=1336696633613)
-    threads = await api.get_ticker_threads(ticker)
+    ticker = await webapi.get_ticker(ticker_id=1336696633613)
+    threads = await webapi.get_ticker_threads(ticker)
     assert len(threads) == 96
 
+    if webapi._db_session:
+        async with webapi._db_session() as s, s.begin():
+            results = (await s.execute(select(Thread))).scalars().all()
+            assert len(results) == 96
 
-async def test_get_thread_postings(api):
-    """Get postings from a thread in an old live ticker."""
-    ticker = await api.get_ticker(ticker_id=1336696633613)
-    threads = {t.id: t for t in await api.get_ticker_threads(ticker)}
-    postings = await api.get_thread_postings(threads[26066484])
+
+async def test_get_thread_postings(webapi):
+    """Get postings of a thread."""
+    ticker = await webapi.get_ticker(ticker_id=1336696633613)
+    threads = {t.id: t for t in await webapi.get_ticker_threads(ticker)}
+    postings = await webapi.get_thread_postings(threads[26066484])
     assert len(postings) == 36
 
+    if webapi._db_session:
+        async with webapi._db_session() as s, s.begin():
+            results = (await s.execute(select(TickerPosting))).scalars().all()
+            assert len(results) == 36
 
-async def test_get_user_full(api):
+
+async def test_get_user_full(webapi):
     """Get a user's information."""
-    user = await api.get_user(legacy_id=228825)
-    assert isinstance(user, User)
+    user = await webapi.get_user(legacy_id=228825, relationships=True)
     assert user.id == 228825
     assert user.name == "Winston Smith."
 
+    if webapi._db_session:
+        async with webapi._db_session() as s, s.begin():
+            results = (await s.execute(select(User))).scalars().all()
+            assert len(results) > 100
 
-async def test_get_user_deleted(api):
+
+async def test_get_user_deleted(webapi):
     """Get a user's information."""
-    user = await api.get_user(legacy_id=738967)
-    assert isinstance(user, User)
+    user = await webapi.get_user(legacy_id=738967, relationships=True)
     assert user.id == 738967
     assert user.deleted is not None
+
+    if webapi._db_session:
+        async with webapi._db_session() as s, s.begin():
+            results = (await s.execute(select(User))).scalars().all()
+            assert len(results) == 1
+
+
+async def test_get_user_deleted_timestamp(webapi):
+    """Check if the deleted timestamp in the database stays constant."""
+    ua = await webapi.get_user(legacy_id=738967)
+    ub = await webapi.get_user(legacy_id=738967)
+
+    if webapi._db_session:
+        async with webapi._db_session() as s, s.begin():
+            result = (await s.execute(select(User))).scalar()
+            assert result.deleted == ua.deleted
 
 
 @pytest.mark.parametrize(
@@ -90,17 +157,13 @@ async def test_get_user_deleted(api):
         (2372424, dt.datetime(2006, 3, 17, 15, 43, tzinfo=pytz.utc)),  # Winter time
     ],
 )
-async def test_get_article(api, article_id, published):
+async def test_get_article(webapi, article_id, published):
     """Get an article."""
-    article = await api.get_article(article_id)
+    article = await webapi.get_article(article_id)
     assert article.id == article_id
     assert article.published == published
 
-
-async def test_contextmanager_api():
-    """Fetch a ticker with the context manager API."""
-    async with WebAPI() as api:
-        ticker = await api.get_ticker(ticker_id=1336696633613)
-        threads = {t.id: t for t in await api.get_ticker_threads(ticker)}
-        postings = await api.get_thread_postings(threads[26066484])
-        assert len(postings) == 36
+    if webapi._db_session:
+        async with webapi._db_session() as s, s.begin():
+            results = (await s.execute(select(Article))).scalars().all()
+            assert len(results) == 1

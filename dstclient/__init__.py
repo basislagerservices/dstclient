@@ -20,7 +20,6 @@
 
 __all__ = (
     "DerStandardAPI",
-    "DatabaseAPI",
     "WebAPI",
     "Article",
     "ArticlePosting",
@@ -49,5 +48,4 @@ from .types import (
     type_registry,
 )
 from .api import DerStandardAPI
-from .dbapi import DatabaseAPI
 from .webapi import WebAPI

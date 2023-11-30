@@ -46,15 +46,6 @@ def random_str(k: int) -> str:
     return "".join(random.choices(string.ascii_letters, k=k))
 
 
-@pytest.fixture(scope="module")
-def api():
-    """Initialize an API object with cookies."""
-    api = WebAPI()
-    asyncio.run(api.update_cookies())
-
-    return api
-
-
 @pytest.fixture
 async def empty_session(tmp_path):
     """Create an empty database with initialized tables.
