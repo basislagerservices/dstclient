@@ -33,7 +33,10 @@ __all__ = (
     "type_registry",
     "events",
     "utils",
+    "select",
 )
+
+from sqlalchemy import select
 
 from . import events
 from . import utils
