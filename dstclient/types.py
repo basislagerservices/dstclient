@@ -108,7 +108,7 @@ class User:
         self.registered = registered
         self.deleted = deleted
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     """Legacy ID of the user."""
 
     # TODO: Use as key, it will eventually supersede the legacy ID.
@@ -215,7 +215,7 @@ class Ticker:
             topics = []
         self.topics = topics
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     """ID of this ticker."""
 
     title: Mapped[str | None] = mapped_column(String(512))
@@ -280,7 +280,7 @@ class Thread:
         self.title = title
         self.message = message
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     """ID of this thread."""
 
     published: Mapped[dt.datetime]
@@ -333,7 +333,7 @@ class Article:
             topics = []
         self.topics = topics
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     """ID of this article."""
 
     published: Mapped[dt.datetime]
@@ -395,7 +395,7 @@ class Posting:
         self.title = title
         self.message = message
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     """ID of this posting."""
 
     type: Mapped[str] = mapped_column(String(64))

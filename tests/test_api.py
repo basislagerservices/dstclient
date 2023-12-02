@@ -29,7 +29,7 @@ from dstclient import *
 
 
 @pytest.fixture
-async def api():
+async def api(engine):
     """Unified API with a database pre-filled with dummy data.
 
     Ticker-i
@@ -43,10 +43,6 @@ async def api():
          ...
          +--- Posting-(N-1)
     """
-    engine = create_async_engine("sqlite+aiosqlite://")
-    session = async_sessionmaker(engine, expire_on_commit=True)
-    async with engine.begin() as conn:
-        await conn.run_sync(type_registry.metadata.create_all)
 
     def usergen(i: int) -> User:
         return User(
@@ -90,6 +86,7 @@ async def api():
         )
 
     N = 8
+    session = async_sessionmaker(engine, expire_on_commit=False)
     async with session() as s, s.begin():
         users = [usergen(i) for i in range(N)]
         s.add_all(users)
