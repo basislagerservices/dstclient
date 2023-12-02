@@ -1,5 +1,6 @@
 aiohttp
 aiosqlite
+aiomysql
 async-lru
 backoff
 beautifulsoup4

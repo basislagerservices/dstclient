@@ -17,160 +17,105 @@
 
 """Configuration and fixtures for unit tests."""
 
-import asyncio
-import datetime as dt
-import random
-import string
-from typing import Union
-
-from lorem_text import lorem
+import contextlib
+import json
+import subprocess as sp
+import socket
+import time
 
 import pytest
 
-from sqlalchemy import event
-from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from dstclient import (
-    WebAPI,
-    Thread,
-    Ticker,
-    TickerPosting,
-    User,
-    type_registry,
-)
+from dstclient import *
 
 
-def random_str(k: int) -> str:
-    """Create a random string."""
-    return "".join(random.choices(string.ascii_letters, k=k))
+@pytest.fixture(scope="session")
+def docker_mariadb():
+    """Run a MariaDB instance in a Docker container.
+
+    Returns the IP address of the instance.
+    """
+    container = sp.Popen(
+        [
+            "docker",
+            "run",
+            "--name",
+            "dstclient-mariadb",
+            "--rm",
+            "--env",
+            "MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=1",
+            "--env",
+            "MARIADB_DATABASE=dstclient",
+            "mariadb:latest",
+        ],
+        stdout=sp.DEVNULL,
+        stderr=sp.DEVNULL,
+    )
+
+    # Poll until the database becomes available.
+    for _ in range(32):
+        result = sp.run(["docker", "inspect", "dstclient-mariadb"], capture_output=True)
+        entries = json.loads(result.stdout)
+        if entries:
+            host = entries[0]["NetworkSettings"]["IPAddress"]
+            with contextlib.suppress(TimeoutError, ConnectionRefusedError):
+                s = socket.socket()
+                s.settimeout(0.5)
+                s.connect((host, 3306))
+                s.close()
+                break
+
+        time.sleep(0.5)
+
+    yield host
+
+    sp.run(["docker", "stop", "dstclient-mariadb"], capture_output=True)
+    container.wait()
 
 
 @pytest.fixture
-async def empty_session(tmp_path):
-    """Create an empty database with initialized tables.
-
-    The result is the session factory.
-    """
-    engine = create_async_engine(f"sqlite+aiosqlite:////{tmp_path}/db.sql")
-    async_session = async_sessionmaker(engine, expire_on_commit=False)
+async def mariadb_engine(docker_mariadb):
+    """Create engine for the empty MariaDB database."""
+    engine = await utils.mysql_engine("dstclient", host=docker_mariadb)
     async with engine.begin() as conn:
         await conn.run_sync(type_registry.metadata.drop_all)
         await conn.run_sync(type_registry.metadata.create_all)
 
-    yield async_session
+    yield engine
 
     await engine.dispose()
 
 
 @pytest.fixture
-async def fullusergen():
-    """Create a random full user."""
+async def sqlite_engine(tmp_path):
+    """Create engine for empty SQLite database."""
+    engine = await utils.sqlite_engine(f"{tmp_path}/db")
 
-    def factory() -> User:
-        name = random_str(16)
-        id = random.randrange(2**32)
-        member_id = random_str(27)
-        registered = dt.datetime.fromtimestamp(random.randrange(2**32)).date()
-        user = User(id, member_id=member_id, name=name, registered=registered)
-        return user
+    yield engine
 
-    return factory
+    await engine.dispose()
 
 
-@pytest.fixture
-async def delusergen():
-    """Create a random deleted user."""
+@pytest.fixture(params=[None, "sqlite", "mariadb"])
+async def engine_none(request, mariadb_engine, sqlite_engine):
+    """Parametrized fixture for supported engines, including None."""
+    if request.param is None:
+        return None
+    elif request.param == "sqlite":
+        return sqlite_engine
+    elif request.param == "mariadb":
+        return mariadb_engine
 
-    def factory() -> User:
-        deleted = dt.datetime.fromtimestamp(random.randrange(2**32)).date()
-        return User(random.randrange(2**32), deleted=deleted)
-
-    return factory
-
-
-@pytest.fixture
-async def tickergen():
-    """Create a random ticker."""
-
-    def factory() -> Ticker:
-        id = random.randrange(2**32)
-        published = dt.datetime.fromtimestamp(random.randrange(2**32))
-        return Ticker(id, random_str(32), published)
-
-    return factory
+    raise Exception("unexpected engine parameter")
 
 
-@pytest.fixture
-async def threadgen(fullusergen, tickergen):
-    """Create a random thread."""
+@pytest.fixture(params=["sqlite", "mariadb"])
+async def engine(request, mariadb_engine, sqlite_engine):
+    """Parametrized fixture for supported engines."""
+    if request.param == "sqlite":
+        return sqlite_engine
+    elif request.param == "mariadb":
+        return mariadb_engine
 
-    def factory(
-        ticker: Union[None, int, Ticker] = None, user: Union[None, int, User] = None
-    ) -> Thread:
-        id = random.randrange(2**32)
-        published = dt.datetime.fromtimestamp(random.randrange(2**32))
-        if ticker is None:
-            ticker = tickergen()
-        if user is None:
-            user = fullusergen()
-
-        up = random.randrange(2**10)
-        down = random.randrange(2**10)
-        title = random.choice([None, random_str(16)])
-        message = random.choice([None, lorem.sentence()])
-
-        return Thread(
-            id=id,
-            published=published,
-            ticker=ticker,
-            user=user,
-            upvotes=up,
-            downvotes=down,
-            title=title,
-            message=message,
-        )
-
-    return factory
-
-
-@pytest.fixture
-async def tickerpostinggen(fullusergen, threadgen):
-    """Create a random ticker posting."""
-
-    def factory(
-        thread: Union[None, int, Thread] = None,
-        user: Union[None, int, User] = None,
-        parent: Union[None, TickerPosting] = None,
-    ) -> TickerPosting:
-        if user is None:
-            user = fullusergen()
-
-        if thread is None and parent is None:
-            thread = threadgen()
-            parent = None
-        elif thread is None and parent is not None:
-            thread = parent.thread
-            parent = parent
-        elif thread is not None and parent is None:
-            thread = thread
-            parent = None
-        else:
-            raise ValueError("Invalid combination of parent and thread")
-
-        id = random.randrange(2**32)
-        published = dt.datetime.fromtimestamp(random.randrange(2**32))
-
-        return TickerPosting(
-            id=id,
-            user=user,
-            parent=parent,
-            published=published,
-            upvotes=random.randrange(2**10),
-            downvotes=random.randrange(2**10),
-            title=random.choice([None, random_str(16)]),
-            message=random.choice([None, lorem.sentence()]),
-            thread=thread,
-        )
-
-    return factory
+    raise Exception("unexpected engine parameter")

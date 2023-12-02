@@ -35,15 +35,14 @@ __all__ = (
 
 import datetime as dt
 from collections import namedtuple
-from typing import Any, Optional, SupportsInt, overload
+from typing import Any, SupportsInt, overload
 
-from sqlalchemy import Column, ForeignKey, Integer, Table
+from sqlalchemy import BigInteger, Column, ForeignKey, Integer, String, Table
 from sqlalchemy.orm import Mapped, mapped_column, registry, relationship, validates
 
 
 Relationships = namedtuple("Relationships", ["followees", "followers"])
 """Relationships between users."""
-
 
 # Type registry for dataclasses.
 type_registry = registry()
@@ -56,13 +55,13 @@ follower_relationship = Table(
     type_registry.metadata,
     Column(
         "follower_user_id",
-        Integer,
+        BigInteger,
         ForeignKey("user.id", ondelete="CASCADE"),
         primary_key=True,
     ),
     Column(
         "followee_user_id",
-        Integer,
+        BigInteger,
         ForeignKey("user.id", ondelete="CASCADE"),
         primary_key=True,
     ),
@@ -109,20 +108,20 @@ class User:
         self.registered = registered
         self.deleted = deleted
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     """Legacy ID of the user."""
 
     # TODO: Use as key, it will eventually supersede the legacy ID.
-    member_id: Mapped[Optional[str]]
+    member_id: Mapped[str | None] = mapped_column(String(64))
     """ID in the new backend."""
 
-    name: Mapped[Optional[str]]
+    name: Mapped[str | None] = mapped_column(String(64))
     """Name of the user."""
 
-    registered: Mapped[Optional[dt.datetime]]
+    registered: Mapped[dt.datetime | None]
     """Time when the user was registered."""
 
-    deleted: Mapped[Optional[dt.datetime]]
+    deleted: Mapped[dt.datetime | None]
     """First time this user was encountered as deleted."""
 
     postings: Mapped[list[TickerPosting]] = relationship(
@@ -156,7 +155,7 @@ class User:
 ticker_topic = Table(
     "ticker_topic",
     type_registry.metadata,
-    Column("ticker_id", Integer, ForeignKey("ticker.id", ondelete="CASCADE")),
+    Column("ticker_id", BigInteger, ForeignKey("ticker.id", ondelete="CASCADE")),
     Column("topic_id", Integer, ForeignKey("topic.id", ondelete="CASCADE")),
 )
 
@@ -164,7 +163,7 @@ ticker_topic = Table(
 article_topic = Table(
     "article_topic",
     type_registry.metadata,
-    Column("article_id", Integer, ForeignKey("article.id")),
+    Column("article_id", BigInteger, ForeignKey("article.id")),
     Column("topic_id", Integer, ForeignKey("topic.id")),
 )
 
@@ -181,7 +180,7 @@ class Topic:
     id: Mapped[int] = mapped_column(primary_key=True)
     """ID of this topic."""
 
-    name: Mapped[str] = mapped_column(unique=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True)
     """Name of this topic."""
 
     articles: Mapped[set["Article"]] = relationship(
@@ -216,10 +215,10 @@ class Ticker:
             topics = []
         self.topics = topics
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     """ID of this ticker."""
 
-    title: Mapped[Optional[str]]
+    title: Mapped[str | None] = mapped_column(String(512))
     """Title of the ticker."""
 
     published: Mapped[dt.datetime]
@@ -253,8 +252,8 @@ class Thread:
         user: SupportsInt | User,
         upvotes: SupportsInt,
         downvotes: SupportsInt,
-        title: Optional[str],
-        message: Optional[str],
+        title: str | None,
+        message: str | None,
     ) -> None:
         """Create a new thread object."""
 
@@ -281,7 +280,7 @@ class Thread:
         self.title = title
         self.message = message
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     """ID of this thread."""
 
     published: Mapped[dt.datetime]
@@ -303,10 +302,10 @@ class Thread:
     downvotes: Mapped[int]
     """Number of downvotes if fetched."""
 
-    title: Mapped[Optional[str]]
+    title: Mapped[str | None] = mapped_column(String(256))
     """Title of the thread posting."""
 
-    message: Mapped[Optional[str]]
+    message: Mapped[str | None] = mapped_column(String(2048))
     """Content of the thread posting."""
 
     postings: Mapped[list[TickerPosting]] = relationship(
@@ -334,7 +333,7 @@ class Article:
             topics = []
         self.topics = topics
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     """ID of this article."""
 
     published: Mapped[dt.datetime]
@@ -368,8 +367,8 @@ class Posting:
         published: dt.datetime,
         upvotes: SupportsInt,
         downvotes: SupportsInt,
-        title: Optional[str],
-        message: Optional[str],
+        title: str | None,
+        message: str | None,
     ) -> None:
         """Do not use this directly."""
 
@@ -396,10 +395,10 @@ class Posting:
         self.title = title
         self.message = message
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     """ID of this posting."""
 
-    type: Mapped[str]
+    type: Mapped[str] = mapped_column(String(64))
     """Type of the posting (ticker, article, ...)"""
 
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"))
@@ -407,11 +406,11 @@ class Posting:
     user: Mapped[User] = relationship(lazy="immediate")
     """The user who posted this."""
 
-    parent_id: Mapped[Optional[int]] = mapped_column(
+    parent_id: Mapped[int | None] = mapped_column(
         ForeignKey("posting.id", ondelete="CASCADE")
     )
     """Optional ID of a parent posting."""
-    parent: Mapped[Optional[Posting]] = relationship(remote_side=[id], lazy="immediate")
+    parent: Mapped[Posting | None] = relationship(remote_side=[id], lazy="immediate")
     """Optional parent posting."""
 
     published: Mapped[dt.datetime]
@@ -423,10 +422,10 @@ class Posting:
     downvotes: Mapped[int]
     """Number of downvotes if fetched."""
 
-    title: Mapped[Optional[str]]
+    title: Mapped[str | None] = mapped_column(String(256))
     """Title of the posting."""
 
-    message: Mapped[Optional[str]]
+    message: Mapped[str | None] = mapped_column(String(1024))
     """Content of the posting."""
 
     responses: Mapped[list[TickerPosting]] = relationship(
@@ -452,8 +451,8 @@ class TickerPosting(Posting):
         published: dt.datetime,
         upvotes: SupportsInt,
         downvotes: SupportsInt,
-        title: Optional[str],
-        message: Optional[str],
+        title: str | None,
+        message: str | None,
         thread: SupportsInt | Thread,
     ) -> None:
         super().__init__(
@@ -499,12 +498,12 @@ class ArticlePosting(Posting):
         self,
         id: SupportsInt,
         user: User,
-        parent: Optional[Posting],
+        parent: Posting | None,
         published: dt.datetime,
         upvotes: SupportsInt,
         downvotes: SupportsInt,
-        title: Optional[str],
-        message: Optional[str],
+        title: str | None,
+        message: str | None,
         article: SupportsInt | Article,
     ) -> None:
         super().__init__(
@@ -552,8 +551,8 @@ class Metadata:
         self.key = key
         self.value = value
 
-    key: Mapped[str] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(256), primary_key=True)
     """Key of the metadata entry."""
 
-    value: Mapped[str]
+    value: Mapped[str] = mapped_column(String(4096))
     """Value of the metadata entry."""

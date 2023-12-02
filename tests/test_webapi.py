@@ -38,14 +38,12 @@ def cookies():
     return api._cookies
 
 
-@pytest.fixture(params=[(None,), ("sqlite+aiosqlite://",)])
-async def webapi(request, cookies):
+@pytest.fixture
+async def webapi(cookies, engine_none):
     """Create a WebAPI object with or without a database attached to it."""
-    (url,) = request.param
-    if url:
-        engine = create_async_engine(url)
-        session = async_sessionmaker(engine, expire_on_commit=False)
-        async with engine.begin() as conn:
+    if engine_none:
+        session = async_sessionmaker(engine_none, expire_on_commit=False)
+        async with engine_none.begin() as conn:
             await conn.run_sync(type_registry.metadata.create_all)
         api = WebAPI(session)
     else:

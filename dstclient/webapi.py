@@ -135,7 +135,7 @@ class WebAPI:
             connector_owner=False,
         )
 
-    async def __aenter__(self) -> Any:
+    async def __aenter__(self) -> "WebAPI":
         """Initialize the API by downloading necessary cookies."""
         await self.update_cookies()
 
@@ -240,7 +240,7 @@ class WebAPI:
                     "One or more parameter values are not valid."
                 ):
                     # Check if the user was already deleted.
-                    deleted = dt.datetime.utcnow()
+                    deleted = dt.datetime.utcnow().replace(microsecond=0)
                     if self._db_session:
                         async with self._db_session() as ds, ds.begin():
                             stmt = select(User.deleted).where(User.id == int(legacy_id))

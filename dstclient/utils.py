@@ -17,7 +17,7 @@
 
 """Utils for other modules."""
 
-__all__ = ("chromedriver", "sqlite_engine")
+__all__ = ("chromedriver", "sqlite_engine", "mysql_engine")
 
 import contextlib
 from typing import Iterator
@@ -61,6 +61,23 @@ def chromedriver() -> Iterator[webdriver.Chrome]:
 async def sqlite_engine(database: str) -> AsyncEngine:
     """Create an asynchronous engine for the given database path."""
     engine = create_async_engine(f"sqlite+aiosqlite:///{database}")
+    async with engine.begin() as conn:
+        await conn.run_sync(type_registry.metadata.create_all)
+    return engine
+
+
+async def mysql_engine(
+    dbname: str,
+    host: str = "127.0.0.1",
+    user: str = "root",
+    password: str = "",
+    port: int = 3306,
+) -> AsyncEngine:
+    """Create an asynchronous engine for a MySQL or MariaDB database."""
+    connstr = (
+        f"mysql+aiomysql://{user}:{password}@{host}:{port}/{dbname}?charset=utf8mb4"
+    )
+    engine = create_async_engine(connstr)
     async with engine.begin() as conn:
         await conn.run_sync(type_registry.metadata.create_all)
     return engine
