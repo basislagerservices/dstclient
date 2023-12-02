@@ -22,8 +22,7 @@ import datetime as dt
 
 import pytest
 
-from sqlalchemy import inspect
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from dstclient import *
 
@@ -103,7 +102,7 @@ async def api(engine):
     yield DerStandardAPI(engine)
 
 
-async def test_database_readonly(api: DerStandardAPI):
+async def test_database_readonly_auto(api: DerStandardAPI):
     """Check that access to the database is readonly."""
     # Get a user and change its name.
     async with api.db() as s:
@@ -114,3 +113,13 @@ async def test_database_readonly(api: DerStandardAPI):
     async with api.db() as s:
         user = await s.get(User, 0)
         assert user.name != "FOOBAR"
+
+
+async def test_database_readonly_commit(api: DerStandardAPI):
+    """Check that access to the database is readonly."""
+    # Get a user and change its name.
+    async with api.db() as s:
+        user = await s.get(User, 0)
+        user.name = "FOOBAR"
+        with pytest.raises(ReadOnlySessionError):
+            await s.commit()

@@ -119,3 +119,9 @@ async def engine(request, mariadb_engine, sqlite_engine):
         return mariadb_engine
 
     raise Exception("unexpected engine parameter")
+
+
+@pytest.fixture
+async def empty_session(engine):
+    """Create an empty database session."""
+    yield async_sessionmaker(engine, expire_on_commit=False)

@@ -20,6 +20,7 @@
 
 __all__ = (
     "DerStandardAPI",
+    "ReadOnlySessionError",
     "WebAPI",
     "Ressort",
     "Article",
@@ -40,7 +41,7 @@ from sqlalchemy import select
 
 from . import events
 from . import utils
-from .api import DerStandardAPI
+from .api import DerStandardAPI, ReadOnlySessionError
 from .types import (
     Article,
     ArticlePosting,

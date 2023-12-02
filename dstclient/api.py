@@ -17,12 +17,21 @@
 
 """Unified API for derstandard.at."""
 
+__all__ = ("DerStandardAPI", "ReadOnlySessionError")
+
+
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from .webapi import WebAPI
+
+
+class ReadOnlySessionError(Exception):
+    """Raise when a disallowed function is called."""
+
+    pass
 
 
 class DerStandardAPI:
@@ -44,7 +53,13 @@ class DerStandardAPI:
         """
         async with self._dbsession() as s, s.begin():
             if readonly:
+                s.add = self._not_allowed("add", async_=False)  # type: ignore
+                s.add_all = self._not_allowed("add_all", async_=False)  # type: ignore
                 s.commit = self._not_allowed("commit", async_=True)  # type: ignore
+                s.delete = self._not_allowed("delete", async_=True)  # type: ignore
+                s.expire = self._not_allowed("expire", async_=False)  # type: ignore
+                s.flush = self._not_allowed("flush", async_=True)  # type: ignore
+                s.merge = self._not_allowed("merge", async_=True)  # type: ignore
 
             yield s
 
@@ -62,10 +77,12 @@ class DerStandardAPI:
         """Create a function that raises and exception."""
 
         def func(*args: Any, **kwargs: Any) -> Any:
-            raise Exception(f"function '{name}' not allowed for read-only sessions")
+            msg = f"function '{name}' not allowed for read-only sessions"
+            raise ReadOnlySessionError(msg)
 
         async def afunc(*args: Any, **kwargs: Any) -> Any:
-            raise Exception(f"function '{name}' not allowed for read-only sessions")
+            msg = f"function '{name}' not allowed for read-only sessions"
+            raise ReadOnlySessionError(msg)
 
         if async_:
             return afunc
