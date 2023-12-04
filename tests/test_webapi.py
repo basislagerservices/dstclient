@@ -181,3 +181,22 @@ async def test_get_article(webapi, article_id, published, title):
         async with webapi._db_session() as s, s.begin():
             results = (await s.execute(select(Article))).scalars().all()
             assert len(results) == 1
+
+
+@pytest.mark.parametrize(
+    "start_date,end_date,narticles, ntickers",
+    [
+        (dt.date(1990, 1, 1), dt.date(1990, 1, 31), 0, 0),
+        (dt.date(2000, 1, 1), dt.date(2000, 1, 31), 26, 0),
+        (dt.date(2020, 3, 1), dt.date(2020, 3, 31), 344, 1),
+    ],
+)
+async def test_get_ressort_entries(webapi, start_date, end_date, narticles, ntickers):
+    """Get entries for a ressort."""
+    articles, tickers = await webapi.get_ressort_entries(
+        "international",
+        start_date,
+        end_date,
+    )
+    assert len(articles) == narticles
+    assert len(tickers) == ntickers

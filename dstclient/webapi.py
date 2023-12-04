@@ -33,7 +33,7 @@ import time
 from types import TracebackType
 from typing import Any, Optional, SupportsInt, cast
 
-from aiohttp import ClientError, ClientSession, TCPConnector
+from aiohttp import ClientError, ClientResponseError, ClientSession, TCPConnector
 
 from async_lru import alru_cache
 
@@ -127,7 +127,7 @@ class WebAPI:
         """Construct an URL for a ticker API request."""
         return "https://www.derstandard.at/jetzt/api/" + tail
 
-    def session(self) -> ClientSession:
+    def session(self, **kwargs: Any) -> ClientSession:
         """Create a client session with credentials."""
         headers = {"content-type": "application/json"}
         return ClientSession(
@@ -135,6 +135,8 @@ class WebAPI:
             headers=headers,
             connector=self._conn,
             connector_owner=False,
+            raise_for_status=True,
+            **kwargs,
         )
 
     async def __aenter__(self) -> "WebAPI":
@@ -507,12 +509,20 @@ class WebAPI:
 
         Returns a tuple (article_ids, ticker_ids).
         """
-        url = self._timeline_url(date, ressort)
-        async with self.session() as s, s.get(url) as resp:
-            text = await resp.text()
-            articles = set(re.findall(r"/story/(?P<ticker_id>[0-9]+)", text))
-            tickers = set(re.findall(r"/jetzt/livebericht/(?P<ticker_id>[0-9]+)", text))
-            return (articles, tickers)
+        try:
+            url = self._timeline_url(date, ressort)
+            async with self.session() as s, s.get(url) as resp:
+                text = await resp.text()
+                articles = set(re.findall(r"/story/(?P<ticker_id>[0-9]+)", text))
+                tickers = set(
+                    re.findall(r"/jetzt/livebericht/(?P<ticker_id>[0-9]+)", text)
+                )
+                return (articles, tickers)
+        except ClientResponseError as e:
+            # We get 404 errors when the date doesn't have any entries, so we ignore it.
+            if e.status == 404:
+                return set(), set()
+            raise
 
     ###########################################################################
     # Accept terms and conditions                                             #

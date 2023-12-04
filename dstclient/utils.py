@@ -17,10 +17,10 @@
 
 """Utils for other modules."""
 
-__all__ = ("chromedriver", "sqlite_engine", "mysql_engine")
+__all__ = ("batched", "chromedriver", "sqlite_engine", "mysql_engine")
 
 import contextlib
-from typing import Iterator
+from typing import Any, Iterable
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -35,7 +35,7 @@ from .types import type_registry
 
 
 @contextlib.contextmanager
-def chromedriver() -> Iterator[webdriver.Chrome]:
+def chromedriver() -> Iterable[webdriver.Chrome]:
     """Create a webdriver for Chrome."""
     try:
         options = Options()
@@ -81,3 +81,12 @@ async def mysql_engine(
     async with engine.begin() as conn:
         await conn.run_sync(type_registry.metadata.create_all)
     return engine
+
+
+# TODO: Replace with itertools.batched for Python 3.12.
+def batched(iterable: Iterable[Any], n: int) -> Iterable[tuple[Any, ...]]:
+    """Batch data from the iterable into tuples of length n."""
+    values = list(iterable)
+    while values:
+        yield tuple(values[:n])
+        values = values[n:]
