@@ -14,3 +14,4 @@ pytest-repeat
 types-beautifulsoup4
 types-python-dateutil
 types-pytz
+types-tqdm

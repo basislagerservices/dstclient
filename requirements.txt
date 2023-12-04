@@ -11,4 +11,5 @@ python-dateutil
 pytz
 selenium
 sqlalchemy
+tqdm
 webdriver-manager

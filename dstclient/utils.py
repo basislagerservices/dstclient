@@ -20,7 +20,7 @@
 __all__ = ("batched", "chromedriver", "sqlite_engine", "mysql_engine")
 
 import contextlib
-from typing import Any, Iterable
+from typing import Any, Generator, Iterable
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -35,7 +35,7 @@ from .types import type_registry
 
 
 @contextlib.contextmanager
-def chromedriver() -> Iterable[webdriver.Chrome]:
+def chromedriver() -> Generator[webdriver.Chrome, None, None]:
     """Create a webdriver for Chrome."""
     try:
         options = Options()

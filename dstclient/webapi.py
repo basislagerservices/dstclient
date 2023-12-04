@@ -56,6 +56,8 @@ from selenium.webdriver.common.by import By
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+import tqdm
+
 from .types import (
     Article,
     ArticlePosting,
@@ -385,12 +387,20 @@ class WebAPI:
             return await resp.json()
 
     @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
-    async def get_thread_postings(self, thread: Thread) -> list[TickerPosting]:
+    async def get_thread_postings(
+        self,
+        thread: Thread,
+        *,
+        progress_bar: tqdm.tqdm | None = None,  # type: ignore
+    ) -> list[TickerPosting]:
         """Get all postings in a ticker thread."""
         raw_postings = []
         page = await self._get_thread_postings_page(thread)
 
         while page["p"]:
+            if progress_bar is not None:
+                progress_bar.update(len(page["p"]))
+
             raw_postings.extend(page["p"])
             skip_to = page["p"][-1]["pid"]
             page = await self._get_thread_postings_page(thread, skip_to=skip_to)
@@ -398,6 +408,10 @@ class WebAPI:
         # Remove duplicates.
         raw_postings = list({p["pid"]: p for p in raw_postings}.values())
         postings = []
+
+        if progress_bar is not None:
+            progress_bar.reset(len(raw_postings))
+
         for p in raw_postings:
             posting = TickerPosting(
                 id=p["pid"],
@@ -414,6 +428,8 @@ class WebAPI:
                 async with self._db_session() as ds, ds.begin():
                     posting = await ds.merge(posting)
             postings.append(posting)
+            if progress_bar is not None:
+                progress_bar.update()
 
         return postings
 
@@ -477,6 +493,8 @@ class WebAPI:
         ressort: str,
         start_date: dt.date,
         end_date: dt.date | None = None,
+        *,
+        progress_bar: tqdm.tqdm | None = None,  # type: ignore
     ) -> tuple[set[int], set[int]]:
         """Get the IDs of articles and tickers in a ressort between two given dates.
 
@@ -491,11 +509,18 @@ class WebAPI:
         articles = set()
         tickers = set()
         date = end_date
+
+        if progress_bar is not None:
+            progress_bar.total = max((end_date - start_date).days, 0)
+
         while date >= start_date:
             a, t = await self._get_ressort_entries(ressort, date)
             articles.update(a)
             tickers.update(t)
             date -= dt.timedelta(days=1)
+
+            if progress_bar is not None:
+                progress_bar.update(1)
 
         return articles, tickers
 
