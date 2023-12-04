@@ -37,7 +37,7 @@ import datetime as dt
 from collections import namedtuple
 from typing import Any, SupportsInt, overload
 
-from sqlalchemy import BigInteger, Column, ForeignKey, Integer, String, Table
+from sqlalchemy import BigInteger, Column, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, registry, relationship, validates
 
 
@@ -320,15 +320,23 @@ class Article:
 
     __tablename__ = "article"
 
+    # TODO: Record authors
+
     def __init__(
         self,
         id: SupportsInt,
         published: dt.datetime,
+        title: str | None,
+        summary: str | None,
+        content: str | None,
         topics: list[Topic] | None = None,
     ) -> None:
         """Create a new article."""
         self.id = int(id)
         self.published = published
+        self.title = title
+        self.summary = summary
+        self.content = content
         if topics is None:
             topics = []
         self.topics = topics
@@ -338,6 +346,15 @@ class Article:
 
     published: Mapped[dt.datetime]
     """Datetime this article was published."""
+
+    title: Mapped[str | None] = mapped_column(String(512))
+    """Title of the article."""
+
+    summary: Mapped[str | None] = mapped_column(Text)
+    """Summary of the article"""
+
+    content: Mapped[str | None] = mapped_column(Text)
+    """Content of the article."""
 
     postings: Mapped[list[ArticlePosting]] = relationship(
         back_populates="article", cascade="all,delete"

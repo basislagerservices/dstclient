@@ -36,7 +36,7 @@ def zero_object():
         Ticker: lambda: Ticker(0, title=None, published=ts, topics=[]),
         Thread: lambda: Thread(0, ts, 0, 0, 0, 0, None, None),
         TickerPosting: lambda: TickerPosting(0, 0, None, ts, 0, 0, None, None, 0),
-        Article: lambda: Article(0, published=ts, topics=[]),
+        Article: lambda: Article(0, ts, None, None, None, []),
         ArticlePosting: lambda: ArticlePosting(0, 0, None, ts, 0, 0, None, None, 0),
     }
 

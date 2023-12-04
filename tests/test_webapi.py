@@ -149,17 +149,33 @@ async def test_get_user_deleted_timestamp(webapi):
 
 
 @pytest.mark.parametrize(
-    "article_id,published",
+    "article_id,published,title",
     [
-        (2429463, dt.datetime(2006, 4, 28, 13, 3, tzinfo=pytz.utc)),  # Summer time
-        (2372424, dt.datetime(2006, 3, 17, 15, 43, tzinfo=pytz.utc)),  # Winter time
+        (
+            2429463,
+            dt.datetime(2006, 4, 28, 13, 3, tzinfo=pytz.utc),
+            "Goldschatz von Nimrud wird wandern",
+        ),  # Summer time
+        (
+            2372424,
+            dt.datetime(2006, 3, 17, 15, 43, tzinfo=pytz.utc),
+            "Feuer soll Affen weiterentwickelt haben",
+        ),  # Winter time
+        (
+            3000000198057,
+            dt.datetime(2023, 12, 4, 6, 8, 37, tzinfo=pytz.utc),
+            "Hoffnung auf fallende Zinsen treibt Goldpreis auf Rekordhoch",
+        ),
     ],
 )
-async def test_get_article(webapi, article_id, published):
+async def test_get_article(webapi, article_id, published, title):
     """Get an article."""
     article = await webapi.get_article(article_id)
     assert article.id == article_id
     assert article.published == published
+    assert article.title == title
+    assert article.summary is not None
+    assert article.content is not None
 
     if webapi._db_session:
         async with webapi._db_session() as s, s.begin():

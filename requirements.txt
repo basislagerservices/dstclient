@@ -5,6 +5,7 @@ async-lru
 backoff
 beautifulsoup4
 gql
+html2text
 lxml
 python-dateutil
 pytz

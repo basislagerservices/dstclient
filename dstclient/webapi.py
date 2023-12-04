@@ -47,6 +47,8 @@ from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql.transport.exceptions import TransportError, TransportQueryError
 
+import html2text
+
 import pytz
 
 from selenium.webdriver.common.by import By
@@ -428,7 +430,29 @@ class WebAPI:
             topics = await self._get_topics(config["nodes"])
             published = dt.datetime.fromisoformat(config["contentPublishingDate"])
 
-            article = Article(article_id, published, topics=topics)
+            soup = BeautifulSoup(page, "lxml")
+            content = None
+            if div := soup.find("div", class_="article-body"):
+                content = html2text.html2text(str(div))
+
+            try:
+                title = config["contentTitle"].strip()
+            except KeyError:
+                title = None
+
+            try:
+                summary = config["contentSummary"].strip()
+            except KeyError:
+                summary = None
+
+            article = Article(
+                article_id,
+                published=published.replace(microsecond=0),
+                title=title,
+                summary=summary,
+                content=content,
+                topics=topics,
+            )
             if self._db_session:
                 async with self._db_session() as ds, ds.begin():
                     article = await ds.merge(article)
