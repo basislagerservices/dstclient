@@ -187,8 +187,9 @@ async def test_get_article(webapi, article_id, published, title):
     "start_date,end_date,narticles, ntickers",
     [
         (dt.date(1990, 1, 1), dt.date(1990, 1, 31), 0, 0),
-        (dt.date(2000, 1, 1), dt.date(2000, 1, 31), 26, 0),
-        (dt.date(2020, 3, 1), dt.date(2020, 3, 31), 344, 1),
+        (dt.date(2000, 1, 1), dt.date(2000, 1, 31), 20, 0),
+        (dt.date(2020, 3, 1), dt.date(2020, 3, 31), 334, 1),
+        (dt.date(1999, 4, 1), dt.date(1999, 4, 30), 14, 0),
     ],
 )
 async def test_get_ressort_entries(webapi, start_date, end_date, narticles, ntickers):

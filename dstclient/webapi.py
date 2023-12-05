@@ -103,7 +103,7 @@ class WebAPI:
     With a sessionmaker, downloaded data is inserted into the database.
     """
 
-    RETRY_EXCEPTIONS = (ClientError, TransportError)
+    RETRY_EXCEPTIONS = (ClientError, TransportError, TimeoutError)
     """Exceptions that trigger a retry of a request."""
 
     RETRY_MAX_TIME = 300
@@ -508,19 +508,24 @@ class WebAPI:
 
         articles = set()
         tickers = set()
-        date = end_date
+        date: dt.date | None = end_date
 
         if progress_bar is not None:
             progress_bar.total = max((end_date - start_date).days, 0)
 
-        while date >= start_date:
-            a, t = await self._get_ressort_entries(ressort, date)
+        while date is not None and date >= start_date:
+            a, t, next_date = await self._get_ressort_entries(ressort, date)
             articles.update(a)
             tickers.update(t)
-            date -= dt.timedelta(days=1)
 
             if progress_bar is not None:
-                progress_bar.update(1)
+                if next_date is None:  # Finished
+                    progress_bar.n = progress_bar.total
+                    progress_bar.refresh()
+                else:
+                    progress_bar.update((date - next_date).days)
+
+            date = next_date
 
         return articles, tickers
 
@@ -529,24 +534,33 @@ class WebAPI:
         self,
         ressort: str,
         date: dt.date,
-    ) -> tuple[set[int], set[int]]:
+    ) -> tuple[set[int], set[int], dt.date | None]:
         """Get ressort entries for the given date.
 
-        Returns a tuple (article_ids, ticker_ids).
+        Returns a tuple (article_ids, ticker_ids, next_date).
         """
         try:
             url = self._timeline_url(date, ressort)
             async with self.session() as s, s.get(url) as resp:
                 text = await resp.text()
-                articles = set(re.findall(r"/story/(?P<ticker_id>[0-9]+)", text))
-                tickers = set(
-                    re.findall(r"/jetzt/livebericht/(?P<ticker_id>[0-9]+)", text)
-                )
-                return (articles, tickers)
+                articles = set(re.findall(r"/story/(?P<id>[0-9]+)", text))
+                tickers = set(re.findall(r"/jetzt/livebericht/(?P<id>[0-9]+)", text))
+
+                # Get the next date without loading too many pages.
+                soup = BeautifulSoup(text, "lxml")
+                if (div := soup.find("div", class_="overview-readmore")) is not None:
+                    a = div.find("a")
+                    _, year, month, day = a.get("href").rsplit("/", maxsplit=3)  # type: ignore
+                    next_date = dt.date(int(year), int(month), int(day))
+                else:
+                    next_date = None
+
+                return (articles, tickers, next_date)
+
         except ClientResponseError as e:
             # We get 404 errors when the date doesn't have any entries, so we ignore it.
             if e.status == 404:
-                return set(), set()
+                return (set(), set(), date - dt.timedelta(days=1))
             raise
 
     ###########################################################################
