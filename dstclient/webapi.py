@@ -122,8 +122,10 @@ class WebAPI:
         # a new per-session pool is created. This is usually slower.
         self._conn: TCPConnector | None = None
 
-        # Factory for database sessions.
+        # Factory for database sessions and a lock for concurrent access.
+        # TODO: Not all backends require locking.
         self._db_session = db_session
+        self._db_lock = asyncio.Lock()
 
     def TURL(self, tail: str) -> str:
         """Construct an URL for a ticker API request."""
@@ -181,14 +183,14 @@ class WebAPI:
         """Create topic objects from a list of strings."""
         entries = []
         if self._db_session:
-            async with self._db_session() as s, s.begin():
+            async with self._db_lock, self._db_session() as ds, ds.begin():
                 for name in topics:
                     query = select(Topic).where(Topic.name == name)
-                    if existing := (await s.execute(query)).scalar():
+                    if existing := (await ds.execute(query)).scalar():
                         entries.append(existing)
                     else:
                         topic = Topic(name)
-                        s.add(topic)
+                        ds.add(topic)
                         entries.append(topic)
         else:
             entries = [Topic(t) for t in topics]
@@ -248,7 +250,7 @@ class WebAPI:
                     # Check if the user was already deleted.
                     deleted = dt.datetime.utcnow().replace(microsecond=0)
                     if self._db_session:
-                        async with self._db_session() as ds, ds.begin():
+                        async with self._db_lock, self._db_session() as ds, ds.begin():
                             stmt = select(User.deleted).where(User.id == int(legacy_id))
                             if old_deleted := (await ds.execute(stmt)).scalar():
                                 deleted = old_deleted
@@ -258,7 +260,7 @@ class WebAPI:
                     raise
 
             if self._db_session:
-                async with self._db_session() as ds, ds.begin():
+                async with self._db_lock, self._db_session() as ds, ds.begin():
                     user = await ds.merge(user)
 
             return user
@@ -340,7 +342,7 @@ class WebAPI:
 
             ticker = Ticker(ticker_id, title, published, topics=topics)  # type: ignore
             if self._db_session:
-                async with self._db_session() as ds, ds.begin():
+                async with self._db_lock, self._db_session() as ds, ds.begin():
                     ticker = await ds.merge(ticker)
 
             return ticker
@@ -362,12 +364,14 @@ class WebAPI:
                     upvotes=t["vp"],
                     downvotes=t["vn"],
                 )
-                if self._db_session:
-                    async with self._db_session() as ds, ds.begin():
-                        thread = await ds.merge(thread)
                 threads.append(thread)
 
-            return threads
+        if self._db_session:
+            async with self._db_lock, self._db_session() as ds, ds.begin():
+                for i, t in enumerate(threads):
+                    threads[i] = await ds.merge(t)
+
+        return threads
 
     @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
     async def _get_thread_postings_page(
@@ -424,12 +428,14 @@ class WebAPI:
                 upvotes=p["vp"],
                 downvotes=p["vn"],
             )
-            if self._db_session:
-                async with self._db_session() as ds, ds.begin():
-                    posting = await ds.merge(posting)
             postings.append(posting)
-            if progress_bar is not None:
-                progress_bar.update()
+
+        if self._db_session:
+            async with self._db_lock, self._db_session() as ds, ds.begin():
+                for i, p in enumerate(postings):
+                    postings[i] = await ds.merge(p)
+                    if progress_bar is not None:
+                        progress_bar.update()
 
         return postings
 
@@ -472,7 +478,7 @@ class WebAPI:
                 topics=topics,
             )
             if self._db_session:
-                async with self._db_session() as ds, ds.begin():
+                async with self._db_lock, self._db_session() as ds, ds.begin():
                     article = await ds.merge(article)
             return article
 
