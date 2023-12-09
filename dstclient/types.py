@@ -379,7 +379,7 @@ class Posting:
     def __init__(
         self,
         id: SupportsInt,
-        user: SupportsInt | User,
+        user: SupportsInt | User | None,
         parent: None | Posting | SupportsInt,
         published: dt.datetime,
         upvotes: SupportsInt,
@@ -392,7 +392,9 @@ class Posting:
         try:
             self.user_id = int(user)  # type: ignore
         except (TypeError, ValueError):
-            if isinstance(user, User):
+            if user is None:
+                self.user = None
+            elif isinstance(user, User):
                 self.user = user
             else:
                 raise TypeError("invalid type for user")
@@ -418,9 +420,12 @@ class Posting:
     type: Mapped[str] = mapped_column(String(64))
     """Type of the posting (ticker, article, ...)"""
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=True,
+    )
     """ID of the user who has published this posting."""
-    user: Mapped[User] = relationship(lazy="immediate")
+    user: Mapped[User | None] = relationship(lazy="immediate")
     """The user who posted this."""
 
     parent_id: Mapped[int | None] = mapped_column(
@@ -514,7 +519,7 @@ class ArticlePosting(Posting):
     def __init__(
         self,
         id: SupportsInt,
-        user: User,
+        user: User | None,
         parent: Posting | None,
         published: dt.datetime,
         upvotes: SupportsInt,

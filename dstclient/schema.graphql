@@ -20,6 +20,7 @@ type Query {
     getMemberRelationshipsPublic(memberId: ID!): MemberRelationships
     getRatingLogForPosting(postingId: ID): [RatingLogEntry]
     getForumByContextUri(contextUri: String!): Forum
+    getForumRootPostingsV2(getForumRootPostingsParamsV2: GetForumRootPostingsParamsV2!): RootPostings
 }
 
 type CommunityMemberUserProfile {
@@ -125,4 +126,41 @@ type Forum {
     totalPostingCount: Int
     stickyPostings: [Posting]
     metadata: [String]
+}
+
+type PageInfo {
+    nextCursor: String
+    previousCursor: String
+    hasNextPage: Boolean
+    hasPreviousPage: Boolean
+}
+
+type Edge {
+    node: Posting
+    cursor: String
+}
+
+type RootPostings {
+    pageInfo: PageInfo
+    edges: [Edge]
+}
+
+enum RootPostingsToRequest {
+    Min
+    Max
+}
+
+enum PostingSortOrder {
+    ByTime
+    ByPositiveRatings
+    ByNegativeRatings
+}
+
+input GetForumRootPostingsParamsV2 {
+    forumId: String!
+    before: String
+    after: String
+    first: RootPostingsToRequest
+    last: RootPostingsToRequest
+    sortOrder: PostingSortOrder
 }

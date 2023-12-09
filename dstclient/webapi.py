@@ -43,7 +43,7 @@ from bs4 import BeautifulSoup
 
 import dateutil.parser as dateparser
 
-from gql import Client, gql
+from gql import Client
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql.transport.exceptions import TransportError, TransportQueryError
 
@@ -58,6 +58,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import tqdm
 
+from . import gql_queries
 from .types import (
     Article,
     ArticlePosting,
@@ -198,7 +199,7 @@ class WebAPI:
         return entries
 
     ###########################################################################
-    # Ticker API                                                              #
+    # User API                                                                #
     ###########################################################################
     @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
     @alru_cache(maxsize=65536)
@@ -213,19 +214,8 @@ class WebAPI:
             url="https://api-gateway.prod.cloud.ds.at/forum-serve-graphql/v1/"
         )
         async with Client(transport=transport, schema=self._schema) as c:
-            query = gql(
-                """
-                query LegacyProfilePublic ($legacyMemberId: ID) {
-                    getCommunityMemberPublic (legacyMemberId: $legacyMemberId) {
-                        name
-                        memberId
-                        memberCreatedAt
-                    }
-                }
-                """
-            )
+            query, params = gql_queries.legacy_profile_public(legacy_id)
             try:
-                params = {"legacyMemberId": legacy_id}
                 response = await c.execute(query, variable_values=params)
                 userdata = response["getCommunityMemberPublic"]
                 user = User(
@@ -272,31 +262,8 @@ class WebAPI:
             url="https://api-gateway.prod.cloud.ds.at/forum-serve-graphql/v1/"
         )
         async with Client(transport=transport, schema=self._schema) as c:
-            query = gql(
-                """
-                query MemberRelationshipsPublic ($memberId: ID!) {
-                    getMemberRelationshipsPublic (memberId: $memberId) {
-                        follower {
-                            member {
-                                legacyId
-                                memberId
-                                name
-                                memberCreatedAt
-                            }
-                        }
-                        followees {
-                            member {
-                                legacyId
-                                memberId
-                                name
-                                memberCreatedAt
-                            }
-                        }
-                    }
-                }
-                """
-            )
-            params = {"memberId": user.member_id}
+            assert isinstance(user.member_id, str)
+            query, params = gql_queries.member_relationships_public(user.member_id)
             response = await c.execute(query, variable_values=params)
             followees = response["getMemberRelationshipsPublic"]["followees"]
             follower = response["getMemberRelationshipsPublic"]["follower"]
@@ -316,6 +283,9 @@ class WebAPI:
 
             return Relationships(followees, follower)
 
+    ###########################################################################
+    # Ticker API                                                              #
+    ###########################################################################
     @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
     async def get_ticker(self, ticker_id: SupportsInt) -> Ticker:
         """Get a ticker from the website API."""
@@ -379,7 +349,7 @@ class WebAPI:
         thread: Thread,
         *,
         skip_to: None | SupportsInt = None,
-    ) -> Any:
+    ) -> Any:  # TODO: Convert to TickerPosting at this point instead of later.
         """Get a single page of postings from a ticker thread."""
         url = self.TURL(
             f"postings?objectId={thread.ticker.id}&redContentId={thread.id}"
@@ -483,9 +453,96 @@ class WebAPI:
             return article
 
     @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
-    async def get_article_postings(self, article: Article) -> list[ArticlePosting]:
+    async def _get_article_postings_page(
+        self,
+        article: Article,
+        forum_id: str,
+        cursor: str | None = None,
+    ) -> tuple[list[ArticlePosting], str | None]:
+        """Get a single page of postings from an article.
+
+        Returns a tuple of a list of postings and a cursor for the next page.
+        """
+        transport = AIOHTTPTransport(
+            url="https://api-gateway.prod.cloud.ds.at/forum-serve-graphql/v1/"
+        )
+        async with Client(transport=transport, schema=self._schema) as c:
+            query, params = gql_queries.threads_by_forum_query(forum_id, cursor)
+            response = await c.execute(query, variable_values=params)
+
+        postings = []
+
+        async def flatten(p: Any, parent: ArticlePosting | None = None) -> None:
+            nonlocal postings
+            legacy_id = p["author"]["legacyData"]["legacyCommunityIdentity"]
+            if not legacy_id:
+                user = None
+            else:
+                user = await self.get_user(legacy_id)
+
+            published = dateparser.parse(p["history"]["created"])
+
+            def get_rating(name: str) -> int:
+                """Get a statistics dict from the posting."""
+                v = [e for e in p["reactions"]["aggregated"] if e["name"] == name][0]
+                return cast(int, v["value"])
+
+            ap = ArticlePosting(
+                id=p["legacy"]["postingId"],
+                user=user,
+                parent=parent,
+                published=published,
+                upvotes=get_rating("positive"),
+                downvotes=get_rating("negative"),
+                title=p["title"],
+                message=p["text"],
+                article=article,
+            )
+            postings.append(ap)
+            for reply in p["replies"]:
+                await flatten(reply, ap)
+
+        for edge in response["getForumRootPostingsV2"]["edges"]:
+            await flatten(edge["node"])
+
+        next_page = None
+        if response["getForumRootPostingsV2"]["pageInfo"]["hasNextPage"]:
+            next_page = response["getForumRootPostingsV2"]["pageInfo"]["nextCursor"]
+
+        return postings, next_page
+
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
+    async def get_article_postings(
+        self,
+        article: Article,
+        *,
+        progress_bar: tqdm.tqdm | None = None,  # type: ignore
+    ) -> list[ArticlePosting]:
         """Get postings from an article."""
-        raise NotImplementedError()
+        transport = AIOHTTPTransport(
+            url="https://api-gateway.prod.cloud.ds.at/forum-serve-graphql/v1/"
+        )
+        async with Client(transport=transport, schema=self._schema) as c:
+            # Get the forum ID first.
+            query, params = gql_queries.get_forum_info(article.id)
+            response = await c.execute(query, variable_values=params)
+            forum_id = response["getForumByContextUri"]["id"]
+
+        postings, cursor = await self._get_article_postings_page(article, forum_id)
+        while cursor:
+            npostings, cursor = await self._get_article_postings_page(
+                article, forum_id, cursor
+            )
+            postings.extend(npostings)
+
+        if self._db_session:
+            async with self._db_lock, self._db_session() as ds, ds.begin():
+                for i, p in enumerate(postings):
+                    postings[i] = await ds.merge(p)
+                    if progress_bar is not None:
+                        progress_bar.update()
+
+        return postings
 
     ###########################################################################
     # General website API                                                     #

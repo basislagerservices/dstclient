@@ -20,7 +20,10 @@
 
 import asyncio
 import datetime as dt
+import os
 import pytz
+
+from graphql import build_schema
 
 import pytest
 
@@ -58,6 +61,19 @@ async def test_cookies():
     api = WebAPI()
     await api.update_cookies()
     assert len(api._cookies) != 0
+
+
+def test_schema():
+    """Test if the GraphQL schema is valid."""
+    with open(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "dstclient",
+            "schema.graphql",
+        )
+    ) as fp:
+        build_schema(fp.read())
 
 
 async def test_get_ticker(webapi: WebAPI):
@@ -181,6 +197,20 @@ async def test_get_article(webapi, article_id, published, title):
         async with webapi._db_session() as s, s.begin():
             results = (await s.execute(select(Article))).scalars().all()
             assert len(results) == 1
+
+
+@pytest.mark.parametrize(
+    "article_id,number_of_postings",
+    [
+        (2000141373827, 165),  # 2022 article
+        (2000092837381, 19),  # 2018 article (old forum)
+    ],
+)
+async def test_get_article_postings(webapi, article_id, number_of_postings):
+    """Get all postings in an article."""
+    article = await webapi.get_article(article_id)
+    postings = await webapi.get_article_postings(article)
+    assert len(postings) == number_of_postings
 
 
 @pytest.mark.parametrize(
