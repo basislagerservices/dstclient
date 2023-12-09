@@ -220,7 +220,7 @@ class WebAPI:
                 userdata = response["getCommunityMemberPublic"]
                 user = User(
                     legacy_id,
-                    member_id=userdata["memberId"],
+                    object_id=userdata["memberId"],
                     name=userdata["name"],
                     registered=dt.datetime.fromisoformat(userdata["memberCreatedAt"]),
                 )
@@ -262,8 +262,8 @@ class WebAPI:
             url="https://api-gateway.prod.cloud.ds.at/forum-serve-graphql/v1/"
         )
         async with Client(transport=transport, schema=self._schema) as c:
-            assert isinstance(user.member_id, str)
-            query, params = gql_queries.member_relationships_public(user.member_id)
+            assert isinstance(user.object_id, str)
+            query, params = gql_queries.member_relationships_public(user.object_id)
             response = await c.execute(query, variable_values=params)
             followees = response["getMemberRelationshipsPublic"]["followees"]
             follower = response["getMemberRelationshipsPublic"]["follower"]
@@ -271,7 +271,7 @@ class WebAPI:
             def entry(data: Any) -> User:
                 return User(
                     data["member"]["legacyId"],
-                    member_id=data["member"]["memberId"],
+                    object_id=data["member"]["memberId"],
                     name=data["member"]["name"],
                     registered=dt.datetime.fromisoformat(
                         data["member"]["memberCreatedAt"]
@@ -310,7 +310,13 @@ class WebAPI:
                 scriptsoup.find("meta", {"itemprop": "datePublished"})["content"]  # type: ignore
             ).astimezone(pytz.utc)
 
-            ticker = Ticker(ticker_id, title, published, topics=topics)  # type: ignore
+            ticker = Ticker(
+                id=ticker_id,
+                object_id=None,
+                title=title,  # type: ignore
+                published=published,
+                topics=topics,
+            )
             if self._db_session:
                 async with self._db_lock, self._db_session() as ds, ds.begin():
                     ticker = await ds.merge(ticker)
@@ -326,6 +332,7 @@ class WebAPI:
             for t in (await resp.json())["rcs"]:
                 thread = Thread(
                     id=t["id"],
+                    object_id=None,
                     published=dateparser.parse(t["ctd"]).astimezone(pytz.utc),
                     ticker=ticker,
                     title=t.get("hl"),
@@ -389,6 +396,7 @@ class WebAPI:
         for p in raw_postings:
             posting = TickerPosting(
                 id=p["pid"],
+                object_id=None,
                 parent=p["ppid"],
                 user=await self.get_user(p["cid"]),
                 thread=thread,
@@ -441,6 +449,7 @@ class WebAPI:
 
             article = Article(
                 article_id,
+                object_id=None,
                 published=published.replace(microsecond=0),
                 title=title,
                 summary=summary,
@@ -489,6 +498,7 @@ class WebAPI:
 
             ap = ArticlePosting(
                 id=p["legacy"]["postingId"],
+                object_id=p["id"],
                 user=user,
                 parent=parent,
                 published=published,

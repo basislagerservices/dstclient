@@ -33,11 +33,13 @@ def zero_object():
     ts = dt.datetime.utcnow().replace(microsecond=0)
     generators = {
         User: lambda: User(0, deleted=ts),
-        Ticker: lambda: Ticker(0, title=None, published=ts, topics=[]),
-        Thread: lambda: Thread(0, ts, 0, 0, 0, 0, None, None),
-        TickerPosting: lambda: TickerPosting(0, 0, None, ts, 0, 0, None, None, 0),
-        Article: lambda: Article(0, ts, None, None, None, []),
-        ArticlePosting: lambda: ArticlePosting(0, 0, None, ts, 0, 0, None, None, 0),
+        Ticker: lambda: Ticker(0, None, title=None, published=ts, topics=[]),
+        Thread: lambda: Thread(0, None, ts, 0, 0, 0, 0, None, None),
+        TickerPosting: lambda: TickerPosting(0, None, 0, None, ts, 0, 0, None, None, 0),
+        Article: lambda: Article(0, None, ts, None, None, None, []),
+        ArticlePosting: lambda: ArticlePosting(
+            0, None, 0, None, ts, 0, 0, None, None, 0
+        ),
     }
 
     def factory(cls):

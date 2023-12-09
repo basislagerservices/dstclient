@@ -86,7 +86,7 @@ class User:
         self,
         id: SupportsInt,
         *,
-        member_id: str,
+        object_id: str,
         name: str,
         registered: dt.datetime,
     ) -> None:
@@ -96,14 +96,14 @@ class User:
         self,
         id: SupportsInt,
         *,
-        member_id: str | None = None,
+        object_id: str | None = None,
         name: str | None = None,
         registered: dt.datetime | None = None,
         deleted: dt.datetime | None = None,
     ) -> None:
         """Create a new full user object."""
         self.id = int(id)
-        self.member_id = member_id
+        self.object_id = object_id
         self.name = name
         self.registered = registered
         self.deleted = deleted
@@ -111,8 +111,7 @@ class User:
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     """Legacy ID of the user."""
 
-    # TODO: Use as key, it will eventually supersede the legacy ID.
-    member_id: Mapped[str | None] = mapped_column(String(64))
+    object_id: Mapped[str | None] = mapped_column(String(64), index=True, unique=True)
     """ID in the new backend."""
 
     name: Mapped[str | None] = mapped_column(String(64))
@@ -203,12 +202,14 @@ class Ticker:
     def __init__(
         self,
         id: SupportsInt,
+        object_id: str | None,
         title: str | None,
         published: dt.datetime,
         topics: list[Topic] | None = None,
     ) -> None:
         """Create a new ticker object."""
         self.id = int(id)
+        self.object_id = object_id
         self.title = title
         self.published = published
         if topics is None:
@@ -217,6 +218,9 @@ class Ticker:
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     """ID of this ticker."""
+
+    object_id: Mapped[str | None] = mapped_column(String(64), index=True, unique=True)
+    """ID in the new backend."""
 
     title: Mapped[str | None] = mapped_column(String(512))
     """Title of the ticker."""
@@ -247,6 +251,7 @@ class Thread:
     def __init__(
         self,
         id: SupportsInt,
+        object_id: str | None,
         published: dt.datetime,
         ticker: SupportsInt | Ticker,
         user: SupportsInt | User,
@@ -274,6 +279,7 @@ class Thread:
                 raise TypeError("invalid type for user")
 
         self.id = int(id)
+        self.object_id = object_id
         self.published = published
         self.upvotes = int(upvotes)
         self.downvotes = int(downvotes)
@@ -282,6 +288,9 @@ class Thread:
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     """ID of this thread."""
+
+    object_id: Mapped[str | None] = mapped_column(String(64), index=True, unique=True)
+    """ID in the new backend."""
 
     published: Mapped[dt.datetime]
     """Datetime this thread was published."""
@@ -321,10 +330,12 @@ class Article:
     __tablename__ = "article"
 
     # TODO: Record authors
+    # TODO: Does an article have a new object ID?
 
     def __init__(
         self,
         id: SupportsInt,
+        object_id: str | None,
         published: dt.datetime,
         title: str | None,
         summary: str | None,
@@ -333,6 +344,7 @@ class Article:
     ) -> None:
         """Create a new article."""
         self.id = int(id)
+        self.object_id = object_id
         self.published = published
         self.title = title
         self.summary = summary
@@ -343,6 +355,9 @@ class Article:
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     """ID of this article."""
+
+    object_id: Mapped[str | None] = mapped_column(String(64), index=True, unique=True)
+    """ID in the new backend."""
 
     published: Mapped[dt.datetime]
     """Datetime this article was published."""
@@ -379,6 +394,7 @@ class Posting:
     def __init__(
         self,
         id: SupportsInt,
+        object_id: str | None,
         user: SupportsInt | User | None,
         parent: None | Posting | SupportsInt,
         published: dt.datetime,
@@ -408,6 +424,7 @@ class Posting:
                 raise TypeError("invalid type for parent")
 
         self.id = int(id)
+        self.object_id = object_id
         self.published = published
         self.upvotes = int(upvotes)
         self.downvotes = int(downvotes)
@@ -416,6 +433,9 @@ class Posting:
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     """ID of this posting."""
+
+    object_id: Mapped[str | None] = mapped_column(String(64), index=True, unique=True)
+    """ID in the new backend."""
 
     type: Mapped[str] = mapped_column(String(64))
     """Type of the posting (ticker, article, ...)"""
@@ -468,6 +488,7 @@ class TickerPosting(Posting):
     def __init__(
         self,
         id: SupportsInt,
+        object_id: str | None,
         user: User,
         parent: None | Posting,
         published: dt.datetime,
@@ -478,7 +499,15 @@ class TickerPosting(Posting):
         thread: SupportsInt | Thread,
     ) -> None:
         super().__init__(
-            id, user, parent, published, upvotes, downvotes, title, message
+            id=id,
+            object_id=object_id,
+            user=user,
+            parent=parent,
+            published=published,
+            upvotes=upvotes,
+            downvotes=downvotes,
+            title=title,
+            message=message,
         )
         try:
             self.thread_id = int(thread)  # type: ignore
@@ -519,6 +548,7 @@ class ArticlePosting(Posting):
     def __init__(
         self,
         id: SupportsInt,
+        object_id: str | None,
         user: User | None,
         parent: Posting | None,
         published: dt.datetime,
@@ -529,7 +559,15 @@ class ArticlePosting(Posting):
         article: SupportsInt | Article,
     ) -> None:
         super().__init__(
-            id, user, parent, published, upvotes, downvotes, title, message
+            id=id,
+            object_id=object_id,
+            user=user,
+            parent=parent,
+            published=published,
+            upvotes=upvotes,
+            downvotes=downvotes,
+            title=title,
+            message=message,
         )
         try:
             self.article_id = int(article)  # type: ignore

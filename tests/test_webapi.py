@@ -212,6 +212,11 @@ async def test_get_article_postings(webapi, article_id, number_of_postings):
     postings = await webapi.get_article_postings(article)
     assert len(postings) == number_of_postings
 
+    if webapi._db_session:
+        async with webapi._db_session() as s, s.begin():
+            results = (await s.execute(select(ArticlePosting))).scalars().all()
+            assert len(results) == number_of_postings
+
 
 @pytest.mark.parametrize(
     "start_date,end_date,narticles, ntickers",

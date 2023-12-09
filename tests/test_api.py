@@ -46,7 +46,7 @@ async def api(engine):
     def usergen(i: int) -> User:
         return User(
             id=i,
-            member_id=f"member-id-{i}",
+            object_id=f"member-id-{i}",
             name=f"user-{i}",
             registered=dt.datetime(1970, 1, 1) + dt.timedelta(days=i),
         )
@@ -54,6 +54,7 @@ async def api(engine):
     def tickergen(i: int) -> Ticker:
         return Ticker(
             id=1000000 * i,
+            object_id=None,
             title=f"Title-{i}",
             published=dt.datetime(1970, 1, 1) + dt.timedelta(days=i),
             topics=[],
@@ -62,6 +63,7 @@ async def api(engine):
     def threadgen(ticker: Ticker, user: User, i: int) -> Thread:
         return Thread(
             id=ticker.id + 1000 * i,
+            object_id=None,
             published=dt.datetime(1970, 1, 1) + dt.timedelta(days=i),
             ticker=ticker,
             user=user,
@@ -74,6 +76,7 @@ async def api(engine):
     def postinggen(thread: Thread, user: User, i: int) -> TickerPosting:
         return TickerPosting(
             id=thread.id + i,
+            object_id=None,
             user=user,
             parent=None,
             published=dt.datetime(1970, 1, 1) + dt.timedelta(days=i),
