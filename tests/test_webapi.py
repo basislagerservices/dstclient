@@ -107,7 +107,7 @@ async def test_get_ticker_topic_overlap(webapi: WebAPI):
 async def test_get_ticker_threads(webapi):
     """Get all threads from an old live ticker."""
     ticker = await webapi.get_ticker(ticker_id=1336696633613)
-    threads = await webapi.get_ticker_threads(ticker)
+    threads = [t async for t in webapi.get_ticker_threads(ticker)]
     assert len(threads) == 96
 
     if webapi._db_session:
@@ -119,8 +119,8 @@ async def test_get_ticker_threads(webapi):
 async def test_get_thread_postings(webapi):
     """Get postings of a thread."""
     ticker = await webapi.get_ticker(ticker_id=1336696633613)
-    threads = {t.id: t for t in await webapi.get_ticker_threads(ticker)}
-    postings = await webapi.get_thread_postings(threads[26066484])
+    threads = {t.id: t async for t in webapi.get_ticker_threads(ticker)}
+    postings = [p async for p in webapi.get_thread_postings(threads[26066484])]
     assert len(postings) == 36
 
     if webapi._db_session:
@@ -209,7 +209,7 @@ async def test_get_article(webapi, article_id, published, title):
 async def test_get_article_postings(webapi, article_id, number_of_postings):
     """Get all postings in an article."""
     article = await webapi.get_article(article_id)
-    postings = await webapi.get_article_postings(article)
+    postings = [p async for p in webapi.get_article_postings(article)]
     assert len(postings) == number_of_postings
 
     if webapi._db_session:
@@ -229,10 +229,15 @@ async def test_get_article_postings(webapi, article_id, number_of_postings):
 )
 async def test_get_ressort_entries(webapi, start_date, end_date, narticles, ntickers):
     """Get entries for a ressort."""
-    articles, tickers = await webapi.get_ressort_entries(
-        "international",
-        start_date,
-        end_date,
-    )
+
+    articles = []
+    tickers = []
+    async for tp, e in webapi.get_ressort_entries(
+        "international", start_date, end_date
+    ):
+        if tp == "article":
+            articles.append(e)
+        if tp == "ticker":
+            tickers.append(e)
     assert len(articles) == narticles
     assert len(tickers) == ntickers

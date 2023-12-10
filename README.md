@@ -25,18 +25,16 @@ This example shows how the web API is used to download all postings in a live ti
 ```python
 from dstclient import DerStandardAPI, utils
 
-
 async def main():
     engine = await utils.sqlite_engine("/tmp/database.db")
     api = DerStandardAPI(engine)
 
     async with api.web() as web:
         ticker = await web.get_ticker(1336696633613)
-        threads = await web.get_ticker_threads(ticker)
         postings = []
-        for thread in threads:
-            threadpostings = await web.get_thread_postings(thread)
-            postings.append(threadpostings)
+        async for thread in web.get_ticker_threads(ticker):
+            async for p in web.get_thread_postings(thread):
+                postings.append(p)
 ```
 
 The web API without a database interface is available as the `WebAPI` class.
@@ -63,7 +61,6 @@ async def main():
     async with api.db() as s:
         users = (await s.execute(select(User))).scalars().all()
 ```
-
 
 By default, the returned session is restricted so that the database is not modified.
 Commits are not allowed and the database is rolled back after the session.

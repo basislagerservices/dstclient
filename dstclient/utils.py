@@ -17,10 +17,10 @@
 
 """Utils for other modules."""
 
-__all__ = ("batched", "chromedriver", "sqlite_engine", "mysql_engine")
+__all__ = ("batched", "chromedriver", "discard", "sqlite_engine", "mysql_engine")
 
 import contextlib
-from typing import Any, Generator, Iterable
+from typing import Any, AsyncIterator, Generator, Iterable
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -90,3 +90,13 @@ def batched(iterable: Iterable[Any], n: int) -> Iterable[tuple[Any, ...]]:
     while values:
         yield tuple(values[:n])
         values = values[n:]
+
+
+async def discard(g: AsyncIterator[Any]) -> None:
+    """Consume the entire iterator and discard results.
+
+    This can be useful if the iteration has side effects, like writing to a database,
+    but the result is not used by the user.
+    """
+    async for _ in g:
+        pass

@@ -31,7 +31,7 @@ import os
 import re
 import time
 from types import TracebackType
-from typing import Any, Optional, SupportsInt, cast
+from typing import Any, AsyncIterator, Literal, Optional, SupportsInt, cast
 
 from aiohttp import ClientError, ClientResponseError, ClientSession, TCPConnector
 
@@ -324,31 +324,35 @@ class WebAPI:
             return ticker
 
     @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
-    async def get_ticker_threads(self, ticker: Ticker) -> list[Thread]:
+    async def get_ticker_threads(self, ticker: Ticker) -> AsyncIterator[Thread]:
         """Get a list of thread IDs of a ticker."""
+        # TODO: Use paging instead of downloading all threads.
         url = self.TURL(f"redcontent?id={ticker.id}&ps={2**16}")
         async with self.session() as s, s.get(url) as resp:
-            threads = []
-            for t in (await resp.json())["rcs"]:
-                thread = Thread(
-                    id=t["id"],
-                    object_id=None,
-                    published=dateparser.parse(t["ctd"]).astimezone(pytz.utc),
-                    ticker=ticker,
-                    title=t.get("hl"),
-                    message=t.get("cm"),
-                    user=await self.get_user(t["cid"]),
-                    upvotes=t["vp"],
-                    downvotes=t["vn"],
-                )
-                threads.append(thread)
+            data = await resp.json()
+
+        threads = [
+            Thread(
+                id=t["id"],
+                object_id=None,
+                published=dateparser.parse(t["ctd"]).astimezone(pytz.utc),
+                ticker=ticker,
+                title=t.get("hl"),
+                message=t.get("cm"),
+                user=await self.get_user(t["cid"]),
+                upvotes=t["vp"],
+                downvotes=t["vn"],
+            )
+            for t in data["rcs"]
+        ]
 
         if self._db_session:
             async with self._db_lock, self._db_session() as ds, ds.begin():
                 for i, t in enumerate(threads):
                     threads[i] = await ds.merge(t)
 
-        return threads
+        for thread in threads:
+            yield thread
 
     @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
     async def _get_thread_postings_page(
@@ -356,8 +360,11 @@ class WebAPI:
         thread: Thread,
         *,
         skip_to: None | SupportsInt = None,
-    ) -> Any:  # TODO: Convert to TickerPosting at this point instead of later.
-        """Get a single page of postings from a ticker thread."""
+    ) -> list[TickerPosting]:
+        """Get a single page of postings from a ticker thread.
+
+        Returns a list of postings and the next page.
+        """
         url = self.TURL(
             f"postings?objectId={thread.ticker.id}&redContentId={thread.id}"
         )
@@ -365,36 +372,10 @@ class WebAPI:
             url += f"&skipToPostingId={skip_to}"
 
         async with self.session() as s, s.get(url) as resp:
-            return await resp.json()
+            page = await resp.json()
 
-    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
-    async def get_thread_postings(
-        self,
-        thread: Thread,
-        *,
-        progress_bar: tqdm.tqdm | None = None,  # type: ignore
-    ) -> list[TickerPosting]:
-        """Get all postings in a ticker thread."""
-        raw_postings = []
-        page = await self._get_thread_postings_page(thread)
-
-        while page["p"]:
-            if progress_bar is not None:
-                progress_bar.update(len(page["p"]))
-
-            raw_postings.extend(page["p"])
-            skip_to = page["p"][-1]["pid"]
-            page = await self._get_thread_postings_page(thread, skip_to=skip_to)
-
-        # Remove duplicates.
-        raw_postings = list({p["pid"]: p for p in raw_postings}.values())
-        postings = []
-
-        if progress_bar is not None:
-            progress_bar.reset(len(raw_postings))
-
-        for p in raw_postings:
-            posting = TickerPosting(
+        postings = [
+            TickerPosting(
                 id=p["pid"],
                 object_id=None,
                 parent=p["ppid"],
@@ -406,16 +387,33 @@ class WebAPI:
                 upvotes=p["vp"],
                 downvotes=p["vn"],
             )
-            postings.append(posting)
-
-        if self._db_session:
-            async with self._db_lock, self._db_session() as ds, ds.begin():
-                for i, p in enumerate(postings):
-                    postings[i] = await ds.merge(p)
-                    if progress_bar is not None:
-                        progress_bar.update()
-
+            for p in page["p"]
+        ]
         return postings
+
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
+    async def get_thread_postings(
+        self,
+        thread: Thread,
+        *,
+        progress_bar: tqdm.tqdm | None = None,  # type: ignore
+    ) -> AsyncIterator[TickerPosting]:
+        """Get all postings in a ticker thread."""
+
+        postings = await self._get_thread_postings_page(thread)
+        while postings:
+            if self._db_session:
+                async with self._db_lock, self._db_session() as ds, ds.begin():
+                    for i, p in enumerate(postings):
+                        postings[i] = await ds.merge(p)
+
+            for p in postings:
+                if progress_bar is not None:
+                    progress_bar.update()
+                yield p
+
+            skip_to = postings[-1].id
+            postings = await self._get_thread_postings_page(thread, skip_to=skip_to)
 
     ###########################################################################
     # Forum API                                                               #
@@ -527,7 +525,7 @@ class WebAPI:
         article: Article,
         *,
         progress_bar: tqdm.tqdm | None = None,  # type: ignore
-    ) -> list[ArticlePosting]:
+    ) -> AsyncIterator[ArticlePosting]:
         """Get postings from an article."""
         transport = AIOHTTPTransport(
             url="https://api-gateway.prod.cloud.ds.at/forum-serve-graphql/v1/"
@@ -539,20 +537,25 @@ class WebAPI:
             forum_id = response["getForumByContextUri"]["id"]
 
         postings, cursor = await self._get_article_postings_page(article, forum_id)
-        while cursor:
-            npostings, cursor = await self._get_article_postings_page(
-                article, forum_id, cursor
+        while postings:
+            if self._db_session:
+                async with self._db_lock, self._db_session() as ds, ds.begin():
+                    for i, p in enumerate(postings):
+                        postings[i] = await ds.merge(p)
+
+            for p in postings:
+                if progress_bar is not None:
+                    progress_bar.update()
+                yield p
+
+            if cursor is None:
+                break
+
+            postings, cursor = await self._get_article_postings_page(
+                article,
+                forum_id=forum_id,
+                cursor=cursor,
             )
-            postings.extend(npostings)
-
-        if self._db_session:
-            async with self._db_lock, self._db_session() as ds, ds.begin():
-                for i, p in enumerate(postings):
-                    postings[i] = await ds.merge(p)
-                    if progress_bar is not None:
-                        progress_bar.update()
-
-        return postings
 
     ###########################################################################
     # General website API                                                     #
@@ -561,53 +564,12 @@ class WebAPI:
     def _timeline_url(date: dt.date, ressort: str) -> str:
         return f"https://www.derstandard.at/{ressort.lower()}/{date.year}/{date.month}/{date.day}"
 
-    async def get_ressort_entries(
-        self,
-        ressort: str,
-        start_date: dt.date,
-        end_date: dt.date | None = None,
-        *,
-        progress_bar: tqdm.tqdm | None = None,  # type: ignore
-    ) -> tuple[set[int], set[int]]:
-        """Get the IDs of articles and tickers in a ressort between two given dates.
-
-        Dates are only a guideline and returned entries might be outside the given
-        date range.
-
-        Returns a tuple (article_ids, ticker_ids).
-        """
-        if end_date is None:
-            end_date = dt.date.today()
-
-        articles = set()
-        tickers = set()
-        date: dt.date | None = end_date
-
-        if progress_bar is not None:
-            progress_bar.total = max((end_date - start_date).days, 0)
-
-        while date is not None and date >= start_date:
-            a, t, next_date = await self._get_ressort_entries(ressort, date)
-            articles.update(a)
-            tickers.update(t)
-
-            if progress_bar is not None:
-                if next_date is None:  # Finished
-                    progress_bar.n = progress_bar.total
-                    progress_bar.refresh()
-                else:
-                    progress_bar.update((date - next_date).days)
-
-            date = next_date
-
-        return articles, tickers
-
     @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
     async def _get_ressort_entries(
         self,
         ressort: str,
         date: dt.date,
-    ) -> tuple[set[int], set[int], dt.date | None]:
+    ) -> tuple[list[tuple[Literal["article", "ticker"], int]], dt.date | None]:
         """Get ressort entries for the given date.
 
         Returns a tuple (article_ids, ticker_ids, next_date).
@@ -616,8 +578,13 @@ class WebAPI:
             url = self._timeline_url(date, ressort)
             async with self.session() as s, s.get(url) as resp:
                 text = await resp.text()
-                articles = set(re.findall(r"/story/(?P<id>[0-9]+)", text))
-                tickers = set(re.findall(r"/jetzt/livebericht/(?P<id>[0-9]+)", text))
+                expr = r"(/story/(?P<article_id>[0-9]+))|(/jetzt/livebericht/(?P<ticker_id>[0-9]+))"
+                entries: list[tuple[Literal["article", "ticker"], int]] = []
+                for match in re.finditer(expr, text):
+                    if match["ticker_id"]:
+                        entries.append(("ticker", int(match["ticker_id"])))
+                    if match["article_id"]:
+                        entries.append(("article", int(match["article_id"])))
 
                 # Get the next date without loading too many pages.
                 soup = BeautifulSoup(text, "lxml")
@@ -628,13 +595,51 @@ class WebAPI:
                 else:
                     next_date = None
 
-                return (articles, tickers, next_date)
+                return (entries, next_date)
 
         except ClientResponseError as e:
             # We get 404 errors when the date doesn't have any entries, so we ignore it.
             if e.status == 404:
-                return (set(), set(), date - dt.timedelta(days=1))
+                return ([], date - dt.timedelta(days=1))
             raise
+
+    async def get_ressort_entries(
+        self,
+        ressort: str,
+        start_date: dt.date,
+        end_date: dt.date | None = None,
+        *,
+        progress_bar: tqdm.tqdm | None = None,  # type: ignore
+    ) -> AsyncIterator[tuple[Literal["ticker", "article"], int]]:
+        """Get the IDs of articles and tickers in a ressort between two given dates.
+
+        Dates are only a guideline and returned entries might be outside the given
+        date range. Entries are returned from the end_date to the past.
+
+        Returns an iterator with tuples ("ticker"|"article", id).
+        """
+        if end_date is None:
+            end_date = dt.date.today()
+
+        date: dt.date | None = end_date
+
+        if progress_bar is not None:
+            progress_bar.total = max((end_date - start_date).days + 1, 0)
+
+        while date is not None and date >= start_date:
+            entries, next_date = await self._get_ressort_entries(ressort, date)
+
+            if progress_bar is not None:
+                if next_date is None or next_date < start_date:  # Finished
+                    progress_bar.n = progress_bar.total
+                    progress_bar.refresh()
+                else:
+                    progress_bar.update((date - next_date).days)
+
+            date = next_date
+
+            for e in entries:
+                yield e
 
     ###########################################################################
     # Accept terms and conditions                                             #
