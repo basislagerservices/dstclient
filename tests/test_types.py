@@ -96,3 +96,21 @@ async def test_add_id_zero_error(
             s.add(obj)
     assert "IntegrityError" in excinfo.value.__class__.__name__
     assert "foreign key constraint" in str(excinfo.value).lower()
+
+
+async def test_load_parent_posting(empty_session: async_sessionmaker[AsyncSession]):
+    """Load a posting and check if eager loading of the parent works."""
+    ts = dt.datetime.now()
+    user = User(0, deleted=ts)
+    article = Article(0, None, ts, None, None, None, [])
+    parent = ArticlePosting(0, None, user, None, ts, 0, 0, None, None, article)
+    child = ArticlePosting(1, None, user, parent, ts, 0, 0, None, None, article)
+
+    async with empty_session() as s, s.begin():
+        s.add_all([user, article, parent, child])
+
+    # Read back the child and check if we can access the parent.
+    async with empty_session() as s, s.begin():
+        result = await s.get(ArticlePosting, child.id)
+        assert result is not None
+        assert result.parent is not None

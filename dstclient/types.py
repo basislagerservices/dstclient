@@ -452,7 +452,11 @@ class Posting:
         ForeignKey("posting.id", ondelete="CASCADE")
     )
     """Optional ID of a parent posting."""
-    parent: Mapped[Posting | None] = relationship(remote_side=[id], lazy="immediate")
+    parent: Mapped[Posting | None] = relationship(
+        remote_side=[id],
+        lazy="joined",
+        join_depth=32,  # This should be enough for all postings currently supported.
+    )
     """Optional parent posting."""
 
     published: Mapped[dt.datetime]
