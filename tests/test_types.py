@@ -98,19 +98,35 @@ async def test_add_id_zero_error(
     assert "foreign key constraint" in str(excinfo.value).lower()
 
 
-async def test_load_parent_posting(empty_session: async_sessionmaker[AsyncSession]):
+@pytest.mark.parametrize("depth", [2, 4, 8, 16, 32, 64])
+async def test_load_parent_posting(
+    empty_session: async_sessionmaker[AsyncSession],
+    depth: int,
+):
     """Load a posting and check if eager loading of the parent works."""
     ts = dt.datetime.now()
     user = User(0, deleted=ts)
     article = Article(0, None, ts, None, None, None, [])
-    parent = ArticlePosting(0, None, user, None, ts, 0, 0, None, None, article)
-    child = ArticlePosting(1, None, user, parent, ts, 0, 0, None, None, article)
+
+    postings = []
+    for i in range(depth):
+        parent = postings[-1] if postings else None
+        child = ArticlePosting(i, None, user, parent, ts, 0, 0, None, None, article)
+        postings.append(child)
 
     async with empty_session() as s, s.begin():
-        s.add_all([user, article, parent, child])
+        s.add_all([user, article])
+        s.add_all(postings)
 
-    # Read back the child and check if we can access the parent.
+    # Read back the last child and go up the chain.
     async with empty_session() as s, s.begin():
-        result = await s.get(ArticlePosting, child.id)
-        assert result is not None
-        assert result.parent is not None
+        p = await s.get(ArticlePosting, postings[-1].id)
+        for i in range(depth - 1):
+            # We use join_depth 8 so we have to refresh every 8 postings.
+            if i != 0 and i % 8 == 0:
+                await s.refresh(p, attribute_names=["parent"])
+
+            assert p.parent is not None
+            p = p.parent
+
+        assert p.parent is None

@@ -455,7 +455,10 @@ class Posting:
     parent: Mapped[Posting | None] = relationship(
         remote_side=[id],
         lazy="joined",
-        join_depth=32,  # This should be enough for all postings currently supported.
+        # This should be enough for most postings. If not, then the parent has to be
+        # refreshed with s.refresh() by the user. SQLAlchemy emits a warning if this
+        # exceeds 12.
+        join_depth=8,
     )
     """Optional parent posting."""
 
