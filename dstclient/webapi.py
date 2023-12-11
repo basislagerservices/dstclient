@@ -491,8 +491,11 @@ class WebAPI:
 
             def get_rating(name: str) -> int:
                 """Get a statistics dict from the posting."""
-                v = [e for e in p["reactions"]["aggregated"] if e["name"] == name][0]
-                return cast(int, v["value"])
+                try:
+                    v = [e for e in p["reactions"]["aggregated"] if e["name"] == name]
+                    return cast(int, v[0]["value"])
+                except IndexError:
+                    return 0
 
             ap = ArticlePosting(
                 id=p["legacy"]["postingId"],
@@ -502,8 +505,8 @@ class WebAPI:
                 published=published,
                 upvotes=get_rating("positive"),
                 downvotes=get_rating("negative"),
-                title=p["title"],
-                message=p["text"],
+                title=p.get("title"),
+                message=p.get("text"),
                 article=article,
             )
             postings.append(ap)
@@ -530,11 +533,18 @@ class WebAPI:
         transport = AIOHTTPTransport(
             url="https://api-gateway.prod.cloud.ds.at/forum-serve-graphql/v1/"
         )
-        async with Client(transport=transport, schema=self._schema) as c:
-            # Get the forum ID first.
-            query, params = gql_queries.get_forum_info(article.id)
-            response = await c.execute(query, variable_values=params)
-            forum_id = response["getForumByContextUri"]["id"]
+        try:
+            async with Client(transport=transport, schema=self._schema) as c:
+                # Get the forum ID first.
+                query, params = gql_queries.get_forum_info(article.id)
+                response = await c.execute(query, variable_values=params)
+                forum_id = response["getForumByContextUri"]["id"]
+        except TransportQueryError as e:
+            data = json.loads(e.args[0].replace("'", '"'))
+            # Some articles don't have forums, for instance 212449.
+            if data["message"] == "Forum not found.":
+                return
+            raise
 
         postings, cursor = await self._get_article_postings_page(article, forum_id)
         while postings:

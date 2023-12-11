@@ -204,6 +204,8 @@ async def test_get_article(webapi, article_id, published, title):
     [
         (2000141373827, 165),  # 2022 article
         (2000092837381, 19),  # 2018 article (old forum)
+        (2000135955773, 33),  # Contains deleted postings
+        (212449, 0),  # Doesn't have a forum
     ],
 )
 async def test_get_article_postings(webapi, article_id, number_of_postings):

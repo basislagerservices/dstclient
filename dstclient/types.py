@@ -457,7 +457,7 @@ class Posting:
         lazy="joined",
         # This should be enough for most postings. If not, then the parent has to be
         # refreshed with s.refresh() by the user. SQLAlchemy emits a warning if this
-        # exceeds 12.
+        # gets too big.
         join_depth=8,
     )
     """Optional parent posting."""
