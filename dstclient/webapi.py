@@ -201,7 +201,7 @@ class WebAPI:
     ###########################################################################
     # User API                                                                #
     ###########################################################################
-    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_value=RETRY_MAX_TIME)
     @alru_cache(maxsize=65536)
     async def get_user(
         self,
@@ -255,7 +255,7 @@ class WebAPI:
 
             return user
 
-    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_value=RETRY_MAX_TIME)
     async def _get_user_relationships(self, user: User) -> Relationships:
         """Get a tuple of followees and followers of a user."""
         transport = AIOHTTPTransport(
@@ -286,7 +286,7 @@ class WebAPI:
     ###########################################################################
     # Ticker API                                                              #
     ###########################################################################
-    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_value=RETRY_MAX_TIME)
     async def get_ticker(self, ticker_id: SupportsInt) -> Ticker:
         """Get a ticker from the website API."""
         url = f"https://www.derstandard.at/jetzt/livebericht/{ticker_id}/"
@@ -323,7 +323,7 @@ class WebAPI:
 
             return ticker
 
-    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_value=RETRY_MAX_TIME)
     async def get_ticker_threads(self, ticker: Ticker) -> AsyncIterator[Thread]:
         """Get a list of thread IDs of a ticker."""
         # TODO: Use paging instead of downloading all threads.
@@ -354,7 +354,7 @@ class WebAPI:
         for thread in threads:
             yield thread
 
-    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_value=RETRY_MAX_TIME)
     async def _get_thread_postings_page(
         self,
         thread: Thread,
@@ -391,7 +391,7 @@ class WebAPI:
         ]
         return postings
 
-    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_value=RETRY_MAX_TIME)
     async def get_thread_postings(
         self,
         thread: Thread,
@@ -418,7 +418,7 @@ class WebAPI:
     ###########################################################################
     # Forum API                                                               #
     ###########################################################################
-    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_value=RETRY_MAX_TIME)
     async def get_article(self, article_id: SupportsInt) -> Article:
         """Get an article."""
         url = f"https://www.derstandard.at/story/{article_id}"
@@ -459,7 +459,7 @@ class WebAPI:
                     article = await ds.merge(article)
             return article
 
-    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_value=RETRY_MAX_TIME)
     async def _get_article_postings_page(
         self,
         article: Article,
@@ -519,7 +519,7 @@ class WebAPI:
 
         return postings, next_page
 
-    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_value=RETRY_MAX_TIME)
     async def get_article_postings(
         self,
         article: Article,
@@ -564,7 +564,7 @@ class WebAPI:
     def _timeline_url(date: dt.date, ressort: str) -> str:
         return f"https://www.derstandard.at/{ressort.lower()}/{date.year}/{date.month}/{date.day}"
 
-    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_time=RETRY_MAX_TIME)
+    @backoff.on_exception(backoff.expo, RETRY_EXCEPTIONS, max_value=RETRY_MAX_TIME)
     async def _get_ressort_entries(
         self,
         ressort: str,
